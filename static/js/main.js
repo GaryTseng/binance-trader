@@ -1,0 +1,760 @@
+// --- DOM 元素定義 ---
+
+// U本位合約相關 DOM 元素
+const symbolSelect = document.getElementById('symbolSelect');
+const leverageSelect = document.getElementById('leverageSelect');
+const marginTypeSelect = document.getElementById('marginTypeSelect');
+const quantityInput = document.getElementById('quantityInput');
+const buyButton = document.getElementById('buyButton');
+const sellButton = document.getElementById('sellButton');
+const messageDiv = document.getElementById('message');
+const positionsListDiv = document.getElementById('positionsList');
+const positionsMessageDiv = document.getElementById('positionsMessage');
+const refreshPositionsButton = document.getElementById('refreshPositionsButton');
+const openOrdersListDiv = document.getElementById('openOrdersList');
+const openOrdersMessageDiv = document.getElementById('openOrdersMessage');
+const refreshOpenOrdersButton = document.getElementById('refreshOpenOrdersButton');
+const cancelAllOpenOrdersButton = document.getElementById('cancelAllOpenOrdersButton');
+const setLeverageButton = document.getElementById('setLeverageButton');
+const changeMarginTypeButton = document.getElementById('changeMarginTypeButton');
+
+// 跟單模式相關 DOM 元素
+const copySymbolSelect = document.getElementById('copySymbolSelect');
+const copyLeverageSelect = document.getElementById('copyLeverageSelect');
+const copyMarginTypeSelect = document.getElementById('copyMarginTypeSelect');
+const copyQuantityInput = document.getElementById('copyQuantityInput');
+const copyBuyButton = document.getElementById('copyBuyButton');
+const copySellButton = document.getElementById('copySellButton');
+const copyMessageDiv = document.getElementById('copyMessage');
+const copyPositionsListDiv = document.getElementById('copyPositionsList');
+const copyPositionsMessageDiv = document.getElementById('copyPositionsMessage');
+const copyRefreshPositionsButton = document.getElementById('copyRefreshPositionsButton');
+const copyOpenOrdersListDiv = document.getElementById('copyOpenOrdersList');
+const copyOpenOrdersMessageDiv = document.getElementById('copyOpenOrdersMessage');
+const copyRefreshOpenOrdersButton = document.getElementById('copyRefreshOpenOrdersButton');
+const copyCancelAllOpenOrdersButton = document.getElementById('copyCancelAllOpenOrdersButton');
+const copySetLeverageButton = document.getElementById('copySetLeverageButton');
+const copyChangeMarginTypeButton = document.getElementById('copyChangeMarginTypeButton');
+
+// 頁籤切換相關 DOM 元素
+const tabFutures = document.getElementById('tab-futures');
+const tabCopytrading = document.getElementById('tab-copytrading');
+const futuresContent = document.getElementById('futures-content');
+const copytradingContent = document.getElementById('copytrading-content');
+
+// 餘額顯示相關 DOM 元素
+const futuresBalanceSpan = document.getElementById('futures-balance');
+const copyBalanceSpan = document.getElementById('copy-balance');
+
+// 價格顯示相關 DOM 元素
+const futuresPriceDiv = document.getElementById('futures-current-price');
+const copyPriceDiv = document.getElementById('copy-current-price');
+
+// 我的最愛面板相關 DOM 元素
+const favoritesPanel = document.getElementById('favorites-panel');
+const favoritesToggleBtn = document.getElementById('favorites-toggle-btn');
+const addFavoriteBtn = document.getElementById('add-favorite-btn');
+const favoriteSymbolInput = document.getElementById('favorite-symbol-input');
+const favoritesList = document.getElementById('favorites-list');
+
+// [新增] 合約價值顯示相關 DOM 元素
+const futuresLeveragedValueDiv = document.getElementById('futures-leveraged-value');
+const copyLeveragedValueDiv = document.getElementById('copy-leveraged-value');
+
+
+// 全域變數
+let exchangeInfo = {};
+let favorites = []; 
+const allSymbolsDatalist = document.getElementById('allSymbolsList');
+let priceUpdateInterval = null; 
+
+
+// --- 輔助函式 ---
+
+function displayMessage(message, type = 'info', targetDiv = messageDiv) {
+    targetDiv.textContent = message;
+    targetDiv.className = type;
+    setTimeout(() => {
+        targetDiv.textContent = '';
+        targetDiv.className = '';
+    }, 5000);
+}
+
+function showConfirmModal(message, callback) {
+    const existingModal = document.getElementById('customConfirmModal');
+    if (existingModal) existingModal.remove();
+
+    const modalHtml = `
+        <div id="customConfirmModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;">
+            <div style="background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); text-align: center; max-width: 400px; width: 90%;">
+                <p style="margin-bottom: 20px; font-size: 1.1em; color: #333;">${message}</p>
+                <button id="confirmYes" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin-right: 15px; font-size: 1em;">是</button>
+                <button id="confirmNo" style="background-color: #dc3545; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1em;">否</button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modal = document.getElementById('customConfirmModal');
+    document.getElementById('confirmYes').onclick = () => {
+        callback(true);
+        modal.remove();
+    };
+    document.getElementById('confirmNo').onclick = () => {
+        callback(false);
+        modal.remove();
+    };
+}
+
+// --- API 相關函式 ---
+
+async function apiCall(endpoint, method = 'GET', data = null, targetMessageDiv) {
+    const options = {
+        method: method,
+        headers: { 'Content-Type': 'application/json' }
+    };
+    if (data) options.body = JSON.stringify(data);
+
+    try {
+        const response = await fetch(endpoint, options);
+        const result = await response.json();
+
+        if (targetMessageDiv) {
+            if (response.ok) {
+                if (result.code === 200 || result.msg === 'success' || (result.status && ['NEW', 'FILLED', 'CANCELED'].includes(result.status))) {
+                    displayMessage(`操作成功`, 'success', targetMessageDiv);
+                } else if (result.code) {
+                    displayMessage(`API 錯誤 (${result.code}): ${result.msg}`, 'error', targetMessageDiv);
+                } else {
+                     displayMessage(`操作成功`, 'success', targetMessageDiv);
+                }
+            } else {
+                const errorMessage = result.msg || `HTTP 錯誤: ${response.status} ${response.statusText}`;
+                displayMessage(`操作失敗: ${errorMessage}`, 'error', targetMessageDiv);
+            }
+        }
+        return response.ok ? result : null;
+    } catch (error) {
+        console.error(`API 請求失敗 (${endpoint}):`, error);
+        if (targetMessageDiv) {
+            displayMessage(`網絡請求失敗: ${error.message}`, 'error', targetMessageDiv);
+        }
+        return null;
+    }
+}
+
+// --- 我的最愛相關函式 ---
+
+function loadFavorites() {
+    const savedFavorites = localStorage.getItem('binanceFuturesFavorites');
+    if (savedFavorites) {
+        favorites = JSON.parse(savedFavorites);
+    }
+}
+
+function saveFavorites() {
+    localStorage.setItem('binanceFuturesFavorites', JSON.stringify(favorites));
+}
+
+function renderFavorites() {
+    favoritesList.innerHTML = ''; 
+    if (favorites.length === 0) {
+        favoritesList.innerHTML = '<li class="no-favorites">尚無最愛項目</li>';
+        return;
+    }
+    favorites.forEach(symbol => {
+        const li = document.createElement('li');
+        li.dataset.symbol = symbol;
+        li.innerHTML = `
+            <span class="favorite-name">${symbol}</span>
+            <button class="remove-favorite-btn" data-symbol="${symbol}" title="移除最愛">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        `;
+        favoritesList.appendChild(li);
+    });
+}
+
+function addFavorite() {
+    const symbol = favoriteSymbolInput.value.trim().toUpperCase();
+    if (!symbol) {
+        displayMessage('請輸入合約代碼。', 'warning', messageDiv);
+        return;
+    }
+    if (!exchangeInfo[symbol]) {
+        displayMessage(`無效的合約代碼: ${symbol}`, 'error', messageDiv);
+        return;
+    }
+    if (favorites.includes(symbol)) {
+        displayMessage(`${symbol} 已在您的最愛清單中。`, 'info', messageDiv);
+        return;
+    }
+
+    favorites.push(symbol);
+    favorites.sort(); 
+    saveFavorites();
+    renderFavorites();
+    favoriteSymbolInput.value = ''; 
+    displayMessage(`已新增 ${symbol} 到我的最愛。`, 'success', messageDiv);
+}
+
+
+async function fetchExchangeInfo() {
+    try {
+        const response = await fetch('/api/exchangeInfo');
+        if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`);
+        exchangeInfo = await response.json();
+        populateSymbolDatalist();
+        console.log('交易對資訊已成功加載。');
+    } catch (error) {
+        console.error('獲取交易對資訊失敗:', error);
+        displayMessage(`獲取交易對資訊失敗: ${error.message}`, 'error');
+    }
+}
+
+function populateSymbolDatalist() {
+    const symbols = Object.keys(exchangeInfo).sort();
+    allSymbolsDatalist.innerHTML = '';
+    symbols.forEach(symbol => {
+        const option = document.createElement('option');
+        option.value = symbol;
+        allSymbolsDatalist.appendChild(option);
+    });
+    if (symbols.includes('BTCUSDT')) {
+        symbolSelect.value = 'BTCUSDT';
+        copySymbolSelect.value = 'BTCUSDT';
+    } else if (symbols.length > 0) {
+        symbolSelect.value = symbols[0];
+        copySymbolSelect.value = symbols[0];
+    }
+}
+
+// --- U本位合約相關函式 ---
+
+async function setLeverage(symbol, leverage) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning');
+        return null;
+    }
+    return apiCall('/api/setLeverage', 'POST', { symbol, leverage }, messageDiv);
+}
+
+async function changeMarginType(symbol, marginType) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning');
+        return null;
+    }
+    return apiCall('/api/changeMarginType', 'POST', { symbol, marginType }, messageDiv);
+}
+
+async function placeOrder(symbol, side, order_type, quantity_usdt = null, quantity_contract = null, price = null, stop_price = null) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning');
+        return null;
+    }
+    const data = { symbol, side, type: order_type };
+    if (quantity_usdt !== null) data.quantity_usdt = quantity_usdt;
+    if (quantity_contract !== null) data.quantity_contract = quantity_contract;
+    if (price !== null) data.price = price;
+    if (stop_price !== null) data.stopPrice = stop_price;
+    return apiCall('/api/placeOrder', 'POST', data, messageDiv);
+}
+
+async function fetchPositions() {
+    positionsMessageDiv.textContent = '載入中...';
+    try {
+        const result = await apiCall('/api/getPositions', 'GET', null, null); 
+        if (result && Array.isArray(result)) {
+            renderPositions(result, positionsListDiv, 'U本位', 'futures');
+            positionsMessageDiv.textContent = '';
+        } else {
+            positionsListDiv.innerHTML = '<p class="no-positions">無法載入U本位持倉資訊。</p>';
+            positionsMessageDiv.textContent = '';
+        }
+    } catch (error) {
+        console.error('獲取U本位持倉失敗:', error);
+        positionsListDiv.innerHTML = '<p class="no-positions">獲取U本位持倉失敗。</p>';
+        positionsMessageDiv.textContent = '';
+    }
+}
+
+async function fetchOpenOrders() {
+    openOrdersMessageDiv.textContent = '載入中...';
+    try {
+        const result = await apiCall(`/api/getOpenOrders`, 'GET', null, null); 
+        if (result && Array.isArray(result)) {
+            renderOpenOrders(result, openOrdersListDiv, 'U本位', 'futures');
+            openOrdersMessageDiv.textContent = '';
+        } else {
+            openOrdersListDiv.innerHTML = '<p class="no-positions">無法載入U本位委託單資訊，或目前沒有委託單。</p>';
+            openOrdersMessageDiv.textContent = '';
+        }
+    } catch (error) {
+        console.error('獲取U本位委託單失敗:', error);
+        openOrdersListDiv.innerHTML = '<p class="no-positions">獲取U本位委託單失敗。</p>';
+        openOrdersMessageDiv.textContent = '';
+    }
+}
+
+async function cancelAllOpenOrders(symbol, apiPrefix) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning', apiPrefix === '/api' ? openOrdersMessageDiv : copyOpenOrdersMessageDiv);
+        return null;
+    }
+    const targetDiv = apiPrefix === '/api' ? openOrdersMessageDiv : copyOpenOrdersMessageDiv;
+    showConfirmModal(`您確定要撤銷 ${symbol} 的所有委託單嗎？`, async (confirmed) => {
+        if (confirmed) {
+            const result = await apiCall(`${apiPrefix}/cancelAllOpenOrders?symbol=${symbol}`, 'DELETE', null, targetDiv);
+            if (result) {
+                if (apiPrefix === '/api') fetchOpenOrders();
+                else fetchCopyOpenOrders();
+            }
+        }
+    });
+}
+
+// --- 跟單模式相關函式 ---
+
+async function setCopyLeverage(symbol, leverage) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning', copyMessageDiv);
+        return null;
+    }
+    return apiCall('/api/copytrading/setLeverage', 'POST', { symbol, leverage }, copyMessageDiv);
+}
+
+async function changeCopyMarginType(symbol, marginType) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning', copyMessageDiv);
+        return null;
+    }
+    return apiCall('/api/copytrading/changeMarginType', 'POST', { symbol, marginType }, copyMessageDiv);
+}
+
+async function placeCopyOrder(symbol, side, order_type, quantity_usdt = null, quantity_contract = null, price = null, stop_price = null) {
+    if (!exchangeInfo[symbol]) {
+        displayMessage('無效的交易對符號...', 'warning', copyMessageDiv);
+        return null;
+    }
+    const data = { symbol, side, type: order_type };
+    if (quantity_usdt !== null) data.quantity_usdt = quantity_usdt;
+    if (quantity_contract !== null) data.quantity_contract = quantity_contract;
+    if (price !== null) data.price = price;
+    if (stop_price !== null) data.stopPrice = stop_price;
+    return apiCall('/api/copytrading/placeOrder', 'POST', data, copyMessageDiv);
+}
+
+async function fetchCopyPositions() {
+    copyPositionsMessageDiv.textContent = '載入中...';
+    try {
+        const result = await apiCall('/api/copytrading/getPositions', 'GET', null, null); 
+        if (result && Array.isArray(result)) {
+            renderPositions(result, copyPositionsListDiv, '跟單模式', 'copytrading');
+            copyPositionsMessageDiv.textContent = '';
+        } else {
+            copyPositionsListDiv.innerHTML = '<p class="no-positions">無法載入跟單模式持倉資訊。</p>';
+            copyPositionsMessageDiv.textContent = '';
+        }
+    } catch (error) {
+        console.error('獲取跟單模式持倉失敗:', error);
+        copyPositionsListDiv.innerHTML = '<p class="no-positions">獲取跟單模式持倉失敗。</p>';
+        copyPositionsMessageDiv.textContent = '';
+    }
+}
+
+async function fetchCopyOpenOrders() {
+    copyOpenOrdersMessageDiv.textContent = '載入中...';
+    try {
+        const result = await apiCall(`/api/copytrading/getOpenOrders`, 'GET', null, null); 
+        if (result && Array.isArray(result)) {
+            renderOpenOrders(result, copyOpenOrdersListDiv, '跟單模式', 'copytrading');
+            copyOpenOrdersMessageDiv.textContent = '';
+        } else {
+            copyOpenOrdersListDiv.innerHTML = '<p class="no-positions">無法載入跟單模式委託單資訊...</p>';
+            copyOpenOrdersMessageDiv.textContent = '';
+        }
+    } catch (error) {
+        console.error('獲取跟單模式委託單失敗:', error);
+        copyOpenOrdersListDiv.innerHTML = '<p class="no-positions">獲取跟單模式委託單失敗。</p>';
+        copyOpenOrdersMessageDiv.textContent = '';
+    }
+}
+
+
+// --- 渲染函式 ---
+
+function renderPositions(positions, targetDiv, mode, apiMode) {
+    if (!positions || positions.length === 0 || positions.every(p => parseFloat(p.positionAmt) === 0)) {
+        targetDiv.innerHTML = `<p class="no-positions">目前沒有 ${mode} 持倉。</p>`;
+        return;
+    }
+    let html = `
+        <table>
+            <thead>
+                <tr>
+                    <th>交易對</th><th>持倉方向</th><th>數量 (單位)</th><th>入口價格</th><th>標記價格</th><th>未實現盈虧 (USDT)</th><th>損益 (ROE %)</th><th>槓桿倍數</th><th>保證金模式</th><th>操作</th><th>止盈設定 (ROE %)</th>
+                </tr>
+            </thead>
+            <tbody>`;
+    positions.forEach(p => {
+        const positionAmt = parseFloat(p.positionAmt);
+        if (positionAmt === 0) return;
+        const entryPrice = parseFloat(p.entryPrice);
+        const markPrice = parseFloat(p.markPrice);
+        const unRealizedProfit = parseFloat(p.unRealizedProfit);
+        const leverage = parseInt(p.leverage);
+        const positionSide = positionAmt > 0 ? '做多' : '做空';
+        let pnlPercentage = 0;
+        const initialMargin = parseFloat(p.initialMargin);
+        if (initialMargin > 0) pnlPercentage = (unRealizedProfit / initialMargin) * 100;
+        else if (unRealizedProfit !== 0) {
+            const initialNotional = entryPrice * Math.abs(positionAmt);
+            if(initialNotional > 0) pnlPercentage = (unRealizedProfit / initialNotional) * 100 * leverage;
+        }
+        const formatNumber = (num, precision = 2) => isNaN(num) || num === null ? 'N/A' : num.toFixed(precision);
+        html += `
+            <tr>
+                <td>${p.symbol}</td>
+                <td><span style="color:${positionAmt > 0 ? 'green':'red'};font-weight:bold;">${positionSide}</span></td>
+                <td>${formatNumber(Math.abs(positionAmt), getQuantityPrecision(p.symbol))}</td>
+                <td>${formatNumber(entryPrice, getPricePrecision(p.symbol))}</td>
+                <td>${formatNumber(markPrice, getPricePrecision(p.symbol))}</td>
+                <td style="color:${unRealizedProfit>=0?'green':'red'};">${formatNumber(unRealizedProfit,3)}</td>
+                <td style="color:${pnlPercentage>=0?'green':'red'};">${formatNumber(pnlPercentage,2)}%</td>
+                <td>${leverage}x</td><td>${p.marginType}</td>
+                <td><button class="action-button-danger close-position-btn" data-symbol="${p.symbol}" data-side="${positionAmt > 0 ? 'SELL':'BUY'}" data-quantity="${Math.abs(positionAmt)}" data-apimode="${apiMode}">平倉</button></td>
+                <td><input type="number" class="take-profit-input" value="5" min="0.1" step="0.1" style="width:60px;display:inline-block;margin-right:5px;">% <button class="action-button set-take-profit-btn" data-symbol="${p.symbol}" data-side="${positionAmt > 0 ? 'SELL':'BUY'}" data-quantity="${Math.abs(positionAmt)}" data-entryprice="${entryPrice}" data-leverage="${leverage}" data-apimode="${apiMode}">止盈</button></td>
+            </tr>`;
+    });
+    html += `</tbody></table>`;
+    targetDiv.innerHTML = html;
+    addPositionButtonListeners(targetDiv, apiMode);
+}
+
+function renderOpenOrders(orders, targetDiv, mode, apiMode) {
+    if (!orders || orders.length === 0) {
+        targetDiv.innerHTML = `<p class="no-positions">目前沒有 ${mode} 委託單。</p>`;
+        return;
+    }
+    let html = `
+        <table>
+            <thead>
+                <tr><th>委託單 ID</th><th>交易對</th><th>方向</th><th>類型</th><th>價格 / 觸發價格</th><th>數量 (單位)</th><th>狀態</th><th>時間</th><th>操作</th></tr>
+            </thead>
+            <tbody>`;
+    orders.forEach(o => {
+        const orderTime = new Date(o.time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+        const formatNumber = (num, precision=2) => (isNaN(num)||num===null) ? 'N/A' : parseFloat(num).toFixed(precision);
+        let priceToDisplay = '-';
+        if (['TAKE_PROFIT_MARKET', 'STOP_MARKET', 'TAKE_PROFIT', 'STOP'].includes(o.type)) {
+            priceToDisplay = (o.stopPrice && parseFloat(o.stopPrice) !== 0) ? formatNumber(o.stopPrice, getPricePrecision(o.symbol)) : '市價觸發';
+        } else if (o.price && parseFloat(o.price) !== 0) {
+            priceToDisplay = formatNumber(o.price, getPricePrecision(o.symbol));
+        } else if (o.type === 'MARKET') {
+            priceToDisplay = '市價';
+        }
+        html += `
+            <tr>
+                <td>${o.orderId}</td><td>${o.symbol}</td>
+                <td><span style="color:${o.side==='BUY'?'green':'red'};font-weight:bold;">${o.side==='BUY'?'買入':'賣出'}</span></td>
+                <td>${o.type}</td><td>${priceToDisplay}</td>
+                <td>${formatNumber(o.origQty, getQuantityPrecision(o.symbol))}</td>
+                <td>${o.status}</td><td>${orderTime}</td>
+                <td><button class="cancel-order-btn" title="撤銷此委託單" data-order-id="${o.orderId}" data-symbol="${o.symbol}" data-apimode="${apiMode}">&times;</button></td>
+            </tr>`;
+    });
+    html += `</tbody></table>`;
+    targetDiv.innerHTML = html;
+    addOpenOrdersButtonListeners(targetDiv);
+}
+
+// --- 精確度輔助函式 ---
+
+function getQuantityPrecision(symbol) {
+    if (exchangeInfo[symbol]) {
+        const filter = exchangeInfo[symbol].filters.find(f => f.filterType === 'LOT_SIZE');
+        if (filter) {
+            const step = filter.stepSize.toString();
+            return step.includes('.') ? step.split('.')[1].length : 0;
+        }
+    }
+    return 0;
+}
+
+function getPricePrecision(symbol) {
+    if (exchangeInfo[symbol]) {
+        const filter = exchangeInfo[symbol].filters.find(f => f.filterType === 'PRICE_FILTER');
+        if (filter) {
+            const tick = filter.tickSize.toString();
+            return tick.includes('.') ? tick.split('.')[1].length : 0;
+        }
+    }
+    return 2;
+}
+
+// --- 動態按鈕事件監聽器 ---
+
+async function cancelSingleOrder(symbol, orderId, apiMode) {
+    const apiPrefix = apiMode === 'futures' ? '/api' : '/api/copytrading';
+    const targetDiv = apiMode === 'futures' ? openOrdersMessageDiv : copyOpenOrdersMessageDiv;
+    showConfirmModal(`您確定要撤銷委託單 ID: ${orderId} 嗎？`, async (confirmed) => {
+        if (confirmed) {
+            const result = await apiCall(`${apiPrefix}/cancelOrder`, 'POST', { symbol, orderId }, targetDiv);
+            if (result) {
+                if (apiMode === 'futures') fetchOpenOrders();
+                else fetchCopyOpenOrders();
+            }
+        }
+    });
+}
+
+function addOpenOrdersButtonListeners(containerDiv) {
+    containerDiv.querySelectorAll('.cancel-order-btn').forEach(button => {
+        button.onclick = () => {
+            const { orderId, symbol, apimode } = button.dataset;
+            cancelSingleOrder(symbol, orderId, apimode);
+        };
+    });
+}
+
+function addPositionButtonListeners(containerDiv, apiMode) {
+    containerDiv.querySelectorAll('.close-position-btn').forEach(button => {
+        button.onclick = async () => {
+            const { symbol, side, quantity } = button.dataset;
+            showConfirmModal(`您確定要市價平倉 ${symbol} 的 ${quantity} 單位嗎？`, async (confirmed) => {
+                if (confirmed) {
+                    const placeOrderFn = apiMode === 'futures' ? placeOrder : placeCopyOrder;
+                    await placeOrderFn(symbol, side, 'MARKET', null, parseFloat(quantity)); 
+                    if (tabFutures.checked) fetchPositions();
+                    else fetchCopyPositions();
+                }
+            });
+        };
+    });
+    containerDiv.querySelectorAll('.set-take-profit-btn').forEach(button => {
+        button.onclick = async () => {
+            const { symbol, side, quantity, entryprice, apimode, leverage } = button.dataset; 
+            const takeProfitPercentage = parseFloat(button.previousElementSibling.value);
+            if (isNaN(takeProfitPercentage) || takeProfitPercentage <= 0) {
+                displayMessage('請輸入有效的止盈百分比。', 'warning', (apiMode === 'futures' ? messageDiv : copyMessageDiv));
+                return;
+            }
+            const entryPriceNum = parseFloat(entryprice);
+            const leverageNum = parseInt(leverage);
+            let stopPrice = side === 'SELL' ? entryPriceNum * (1 + (takeProfitPercentage / (100 * leverageNum))) : entryPriceNum * (1 - (takeProfitPercentage / (100 * leverageNum)));
+            stopPrice = parseFloat(stopPrice.toFixed(getPricePrecision(symbol)));
+            showConfirmModal(`為 ${symbol} 建立止盈單(ROE ${takeProfitPercentage}%)？觸發價: ${stopPrice}`, async (confirmed) => {
+                if (confirmed) {
+                    const placeOrderFn = apimode === 'futures' ? placeOrder : placeCopyOrder;
+                    await placeOrderFn(symbol, side, 'TAKE_PROFIT_MARKET', null, parseFloat(quantity), null, stopPrice);
+                }
+            });
+        };
+    });
+}
+
+
+// --- 事件監聽器 ---
+
+setLeverageButton.addEventListener('click', async () => {
+    const symbol = symbolSelect.value.toUpperCase();
+    const leverage = parseInt(leverageSelect.value);
+    if (!isNaN(leverage) && leverage > 0) await setLeverage(symbol, leverage);
+    else displayMessage('請輸入有效的槓桿倍數', 'warning');
+});
+changeMarginTypeButton.addEventListener('click', () => changeMarginType(symbolSelect.value.toUpperCase(), marginTypeSelect.value));
+
+buyButton.addEventListener('click', () => {
+    const leveragedValue = parseFloat(futuresLeveragedValueDiv.textContent);
+    if (!isNaN(leveragedValue) && leveragedValue > 0) {
+        placeOrder(symbolSelect.value.toUpperCase(), 'BUY', 'MARKET', leveragedValue);
+    } else {
+        displayMessage('請輸入有效的保證金和槓桿。', 'warning');
+    }
+});
+sellButton.addEventListener('click', () => {
+    const leveragedValue = parseFloat(futuresLeveragedValueDiv.textContent);
+    if (!isNaN(leveragedValue) && leveragedValue > 0) {
+        placeOrder(symbolSelect.value.toUpperCase(), 'SELL', 'MARKET', leveragedValue);
+    } else {
+        displayMessage('請輸入有效的保證金和槓桿。', 'warning');
+    }
+});
+refreshPositionsButton.addEventListener('click', fetchPositions);
+refreshOpenOrdersButton.addEventListener('click', fetchOpenOrders);
+cancelAllOpenOrdersButton.addEventListener('click', () => cancelAllOpenOrders(symbolSelect.value.toUpperCase(), '/api'));
+
+copySetLeverageButton.addEventListener('click', () => {
+    const leverage = parseInt(copyLeverageSelect.value);
+    if (!isNaN(leverage) && leverage > 0) setCopyLeverage(copySymbolSelect.value.toUpperCase(), leverage);
+    else displayMessage('請輸入有效的槓桿倍數', 'warning', copyMessageDiv);
+});
+copyChangeMarginTypeButton.addEventListener('click', () => changeCopyMarginType(copySymbolSelect.value.toUpperCase(), copyMarginTypeSelect.value));
+
+copyBuyButton.addEventListener('click', () => {
+    const leveragedValue = parseFloat(copyLeveragedValueDiv.textContent);
+    if (!isNaN(leveragedValue) && leveragedValue > 0) {
+        placeCopyOrder(copySymbolSelect.value.toUpperCase(), 'BUY', 'MARKET', leveragedValue);
+    } else {
+        displayMessage('請輸入有效的保證金和槓桿。', 'warning', copyMessageDiv);
+    }
+});
+copySellButton.addEventListener('click', () => {
+     const leveragedValue = parseFloat(copyLeveragedValueDiv.textContent);
+    if (!isNaN(leveragedValue) && leveragedValue > 0) {
+        placeCopyOrder(copySymbolSelect.value.toUpperCase(), 'SELL', 'MARKET', leveragedValue);
+    } else {
+        displayMessage('請輸入有效的保證金和槓桿。', 'warning', copyMessageDiv);
+    }
+});
+copyRefreshPositionsButton.addEventListener('click', fetchCopyPositions);
+copyRefreshOpenOrdersButton.addEventListener('click', fetchCopyOpenOrders);
+copyCancelAllOpenOrdersButton.addEventListener('click', () => cancelAllOpenOrders(copySymbolSelect.value.toUpperCase(), '/api/copytrading'));
+
+// --- 即時更新相關 ---
+
+async function updateTickerPrice() {
+    let symbol, targetDiv, apiEndpoint;
+    if (tabFutures.checked) {
+        symbol = symbolSelect.value.toUpperCase();
+        targetDiv = futuresPriceDiv;
+        apiEndpoint = '/api/tickerPrice';
+    } else {
+        symbol = copySymbolSelect.value.toUpperCase();
+        targetDiv = copyPriceDiv;
+        apiEndpoint = '/api/copytrading/tickerPrice';
+    }
+    if (!symbol || !exchangeInfo[symbol]) {
+        targetDiv.textContent = '-- USDT';
+        return;
+    }
+    const priceResponse = await apiCall(`${apiEndpoint}?symbol=${symbol}`, 'GET', null, null);
+    if (priceResponse && priceResponse.price) {
+        let oldPrice = parseFloat(targetDiv.textContent) || 0;
+        let newPrice = parseFloat(priceResponse.price);
+        targetDiv.textContent = `${newPrice.toFixed(getPricePrecision(symbol))} USDT`;
+        if (newPrice > oldPrice) targetDiv.style.color = '#28a745';
+        else if (newPrice < oldPrice) targetDiv.style.color = '#dc3545';
+    } else {
+        targetDiv.textContent = '獲取失敗';
+    }
+}
+
+function handleSymbolChange() {
+    if (priceUpdateInterval) clearInterval(priceUpdateInterval);
+    updateTickerPrice();
+    priceUpdateInterval = setInterval(updateTickerPrice, 2000);
+}
+
+async function updateAccountBalances() {
+    const futuresBalanceData = await apiCall('/api/getBalance', 'GET', null, null);
+    if (futuresBalanceData && Array.isArray(futuresBalanceData)) {
+        const usdtBalance = futuresBalanceData.find(asset => asset.asset === 'USDT');
+        futuresBalanceSpan.textContent = usdtBalance ? parseFloat(usdtBalance.availableBalance).toFixed(2) : 'N/A';
+    } else {
+        futuresBalanceSpan.textContent = '錯誤';
+    }
+    const copyBalanceData = await apiCall('/api/copytrading/getBalance', 'GET', null, null);
+    if (copyBalanceData && Array.isArray(copyBalanceData)) {
+        const usdtBalance = copyBalanceData.find(asset => asset.asset === 'USDT');
+        copyBalanceSpan.textContent = usdtBalance ? parseFloat(usdtBalance.availableBalance).toFixed(2) : 'N/A';
+    } else {
+        copyBalanceSpan.textContent = '錯誤';
+    }
+}
+
+// [新增] 更新合約價值的函式
+function updateLeveragedValue() {
+    const margin = parseFloat(quantityInput.value);
+    const leverage = parseInt(leverageSelect.value);
+    if (!isNaN(margin) && !isNaN(leverage) && margin > 0) {
+        const leveragedValue = margin * leverage;
+        futuresLeveragedValueDiv.textContent = leveragedValue.toFixed(2) + ' USDT';
+    } else {
+        futuresLeveragedValueDiv.textContent = '-- USDT';
+    }
+
+    const copyMargin = parseFloat(copyQuantityInput.value);
+    const copyLeverage = parseInt(copyLeverageSelect.value);
+    if (!isNaN(copyMargin) && !isNaN(copyLeverage) && copyMargin > 0) {
+        const copyLeveragedValue = copyMargin * copyLeverage;
+        copyLeveragedValueDiv.textContent = copyLeveragedValue.toFixed(2) + ' USDT';
+    } else {
+        copyLeveragedValueDiv.textContent = '-- USDT';
+    }
+}
+
+function setupTab(isFutures) {
+    futuresContent.classList.toggle('active', isFutures);
+    copytradingContent.classList.toggle('active', !isFutures);
+    if (isFutures) {
+        fetchPositions();
+        fetchOpenOrders();
+    } else {
+        fetchCopyPositions();
+        fetchCopyOpenOrders();
+    }
+    handleSymbolChange();
+    updateLeveragedValue(); // 切換頁籤時也更新
+}
+
+tabFutures.addEventListener('change', () => setupTab(true));
+tabCopytrading.addEventListener('change', () => setupTab(false));
+
+
+function startRealtimeUpdates() {
+    setInterval(() => {
+        if (tabFutures.checked) {
+            fetchPositions();
+            fetchOpenOrders();
+        } else {
+            fetchCopyPositions();
+            fetchCopyOpenOrders();
+        }
+        updateAccountBalances();
+    }, 10000); 
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    loadFavorites();
+    renderFavorites();
+
+    await fetchExchangeInfo();
+    updateAccountBalances(); 
+    
+    favoritesToggleBtn.addEventListener('click', () => {
+        favoritesPanel.classList.toggle('collapsed');
+        document.body.classList.toggle('favorites-collapsed');
+    });
+    addFavoriteBtn.addEventListener('click', addFavorite);
+    favoriteSymbolInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addFavorite();
+    });
+    favoritesList.addEventListener('click', (e) => {
+        const target = e.target;
+        const symbol = target.closest('li')?.dataset.symbol;
+        if (target.closest('.remove-favorite-btn')) {
+            const symbolToRemove = target.closest('.remove-favorite-btn').dataset.symbol;
+            favorites = favorites.filter(s => s !== symbolToRemove);
+            saveFavorites();
+            renderFavorites();
+        } else if (symbol) {
+            const targetInput = tabFutures.checked ? symbolSelect : copySymbolSelect;
+            targetInput.value = symbol;
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+
+    symbolSelect.addEventListener('input', handleSymbolChange);
+    copySymbolSelect.addEventListener('input', handleSymbolChange);
+
+    // [新增] 為保證金和槓桿欄位新增事件監聽器
+    quantityInput.addEventListener('input', updateLeveragedValue);
+    leverageSelect.addEventListener('change', updateLeveragedValue);
+    copyQuantityInput.addEventListener('input', updateLeveragedValue);
+    copyLeverageSelect.addEventListener('change', updateLeveragedValue);
+    
+    setupTab(tabFutures.checked);
+    startRealtimeUpdates();
+    updateLeveragedValue(); // 首次載入時初始化一次
+});

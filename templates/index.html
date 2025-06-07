@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>幣安合約簡易交易</title>
+    <!-- 使用 Flask 的 url_for 函數來引用靜態 CSS 檔案 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- 引入 Font Awesome 圖標庫 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <!-- 我的最愛浮動面板 -->
+    <div id="favorites-panel">
+        <button id="favorites-toggle-btn" title="切換我的最愛面板">
+            <i class="fa-solid fa-star"></i>
+        </button>
+        <div class="favorites-content">
+            <h3><i class="fa-solid fa-star"></i> 我的最愛</h3>
+            <div id="add-favorite-form">
+                <input type="text" id="favorite-symbol-input" list="allSymbolsList" placeholder="新增合約..." autocomplete="off">
+                <button id="add-favorite-btn"><i class="fa-solid fa-plus"></i> 新增</button>
+            </div>
+            <ul id="favorites-list">
+            </ul>
+        </div>
+    </div>
+
+    <!-- 餘額顯示容器 -->
+    <div id="balance-container">
+        <div id="futures-balance-display">U本位餘額: <span id="futures-balance">載入中...</span> USDT</div>
+        <div id="copy-balance-display">跟單員餘額: <span id="copy-balance">載入中...</span> USDT</div>
+    </div>
+
+    <!-- 頁籤容器 -->
+    <div class="header-tabs">
+        <input type="radio" name="tabs" id="tab-futures" checked>
+        <label for="tab-futures">U本位合約</label>
+        <input type="radio" name="tabs" id="tab-copytrading">
+        <label for="tab-copytrading">跟單模式 (開單員)</label>
+        <div class="tab-slider"></div>
+    </div>
+
+    <!-- U本位合約內容區塊 -->
+    <div id="futures-content" class="tab-content active">
+        <div class="container">
+            <h1>幣安合約簡易交易</h1>
+            <p class="description">此頁面用於管理您U本位合約帳戶的直接交易。</p>
+
+            <div class="form-group">
+                <label for="symbolSelect">選擇合約:</label>
+                <input type="text" id="symbolSelect" list="allSymbolsList" placeholder="輸入或選擇合約" autocomplete="off">
+                <datalist id="allSymbolsList"></datalist>
+            </div>
+
+            <div class="form-group">
+                <label>最新價格:</label>
+                <div id="futures-current-price" class="price-display">-- USDT</div>
+            </div>
+
+            <div class="form-group">
+                <label for="leverageSelect">設置槓桿倍數:</label>
+                <select id="leverageSelect">
+                    <option value="1">1x</option>
+                    <option value="5">5x</option>
+                    <option value="10">10x</option>
+                    <option value="20" selected>20x</option>
+                    <option value="50">50x</option>
+                    <option value="75">75x</option>
+                    <option value="100">100x</option>
+                    <option value="125">125x</option>
+                </select>
+                <button id="setLeverageButton" class="action-button">設定槓桿</button>
+            </div>
+
+            <div class="form-group">
+                <label for="marginTypeSelect">選擇保證金模式:</label>
+                <select id="marginTypeSelect">
+                    <option value="ISOLATED">逐倉</option>
+                    <option value="CROSSED">全倉</option>
+                </select>
+                <button id="changeMarginTypeButton" class="action-button">修改保證金模式</button>
+            </div>
+            
+            <!-- [修改] 下單數量改為保證金輸入 -->
+            <div class="form-group">
+                <label for="quantityInput">保證金 (USDT):</label>
+                <input type="number" id="quantityInput" value="50" min="1" step="any">
+                <div id="futures-leveraged-value" class="leveraged-value-display">-- USDT</div>
+            </div>
+
+            <button id="buyButton">買入 (開多)</button>
+            <button id="sellButton">賣出 (開空)</button>
+
+            <div id="message" class="info"></div>
+        </div>
+
+        <div class="container">
+            <h2>U本位合約 - 您的持有倉位清單</h2>
+            <button id="refreshPositionsButton" class="action-button" style="width: auto; margin-bottom: 15px;">刷新倉位</button>
+            <div id="positionsList"></div>
+            <div id="positionsMessage" class="info"></div>
+        </div>
+
+        <div class="container">
+            <h2>U本位合約 - 您的當前委託清單</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button id="refreshOpenOrdersButton" class="action-button" style="width: auto;">刷新委託單</button>
+                <button id="cancelAllOpenOrdersButton" class="action-button-danger" style="width: auto;">全部撤銷</button>
+            </div>
+            <div id="openOrdersList"></div>
+            <div id="openOrdersMessage" class="info"></div>
+        </div>
+    </div>
+
+    <!-- 跟單模式內容區塊 -->
+    <div id="copytrading-content" class="tab-content">
+        <div class="container">
+            <h1>跟單模式 (開單員) - 交易介面</h1>
+            <p class="description">此頁面用於管理您的跟單模式 (開單員) 帳戶交易。</p>
+
+            <div class="form-group">
+                <label for="copySymbolSelect">選擇合約:</label>
+                <input type="text" id="copySymbolSelect" list="allSymbolsList" placeholder="輸入或選擇合約" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label>最新價格:</label>
+                <div id="copy-current-price" class="price-display">-- USDT</div>
+            </div>
+
+            <div class="form-group">
+                <label for="copyLeverageSelect">設置槓桿倍數:</label>
+                <select id="copyLeverageSelect">
+                    <option value="1">1x</option>
+                    <option value="5">5x</option>
+                    <option value="10">10x</option>
+                    <option value="20" selected>20x</option>
+                    <option value="50">50x</option>
+                    <option value="75">75x</option>
+                    <option value="100">100x</option>
+                    <option value="125">125x</option>
+                </select>
+                <button id="copySetLeverageButton" class="action-button">設定槓桿</button>
+            </div>
+
+            <div class="form-group">
+                <label for="copyMarginTypeSelect">選擇保證金模式:</label>
+                <select id="copyMarginTypeSelect">
+                    <option value="ISOLATED">逐倉</option>
+                    <option value="CROSSED">全倉</option>
+                </select>
+                <button id="copyChangeMarginTypeButton" class="action-button">修改保證金模式</button>
+            </div>
+
+            <!-- [修改] 下單數量改為保證金輸入 -->
+            <div class="form-group">
+                <label for="copyQuantityInput">保證金 (USDT):</label>
+                <input type="number" id="copyQuantityInput" value="50" min="1" step="any">
+                <div id="copy-leveraged-value" class="leveraged-value-display">-- USDT</div>
+            </div>
+
+            <button id="copyBuyButton">買入 (開多)</button>
+            <button id="copySellButton">賣出 (開空)</button>
+
+            <div id="copyMessage" class="info"></div>
+        </div>
+
+        <div class="container">
+            <h2>跟單模式 (開單員) - 您的持有倉位清單</h2>
+            <button id="copyRefreshPositionsButton" class="action-button" style="width: auto; margin-bottom: 15px;">刷新倉位</button>
+            <div id="copyPositionsList"></div>
+            <div id="copyPositionsMessage" class="info"></div>
+        </div>
+
+        <div class="container">
+            <h2>跟單模式 (開單員) - 您的當前委託清單</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button id="copyRefreshOpenOrdersButton" class="action-button" style="width: auto;">刷新委託單</button>
+                <button id="copyCancelAllOpenOrdersButton" class="action-button-danger" style="width: auto;">全部撤銷</button>
+            </div>
+            <div id="copyOpenOrdersList"></div>
+            <div id="copyOpenOrdersMessage" class="info"></div>
+        </div>
+    </div>
+
+    <!-- 使用 Flask 的 url_for 函數來引用靜態 JavaScript 檔案 -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
