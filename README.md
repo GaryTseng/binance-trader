@@ -1,3 +1,7 @@
+![image](https://github.com/user-attachments/assets/16fae020-e9b0-4570-a340-90e4bcf3e0c6)
+![image](https://github.com/user-attachments/assets/03ae879c-af66-4e0f-979b-fa24d8ba20f6)
+
+
 幣安合約交易 Web 應用程式
 這是一個基於 Flask 的 Web 應用程式，提供了一個簡易的操作介面，用於執行幣安（Binance）的 U 本位合約交易，並包含一個獨立的「開單員」跟單模式。
 
