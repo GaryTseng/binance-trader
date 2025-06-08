@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>幣安合約簡易交易</title>
-    <!-- 使用 Flask 的 url_for 函數來引用靜態 CSS 檔案 -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <!-- 引入 Font Awesome 圖標庫 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- [新增] Datepicker CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vanillajs-datepicker@1.3.4/dist/css/datepicker-bs5.min.css">
 </head>
 <body>
     <!-- 我的最愛浮動面板 -->
@@ -23,6 +23,31 @@
             </div>
             <ul id="favorites-list">
             </ul>
+        </div>
+    </div>
+
+    <!-- [新增] 交易紀錄浮動面板 -->
+    <div id="history-panel">
+        <button id="history-toggle-btn" title="切換交易紀錄面板">
+            <i class="fa-solid fa-history"></i>
+        </button>
+        <div class="history-content">
+            <h3><i class="fa-solid fa-history"></i> 交易紀錄</h3>
+            <div class="history-tabs">
+                <input type="radio" name="history-tabs" id="history-tab-futures" checked>
+                <label for="history-tab-futures">U本位</label>
+                <input type="radio" name="history-tabs" id="history-tab-copytrading">
+                <label for="history-tab-copytrading">跟單</label>
+            </div>
+            <div class="date-range-form">
+                <input type="text" id="history-start-date" placeholder="起始日期">
+                <input type="text" id="history-end-date" placeholder="結束日期">
+                <button id="query-history-btn">查詢</button>
+            </div>
+            <ul id="trade-history-list">
+                <!-- 交易紀錄將由 JS 動態生成 -->
+            </ul>
+             <div id="history-message" class="info"></div>
         </div>
     </div>
 
@@ -58,31 +83,10 @@
                 <div id="futures-current-price" class="price-display">-- USDT</div>
             </div>
 
-            <!-- [修改] 擴充槓桿選項 -->
             <div class="form-group">
                 <label for="leverageSelect">槓桿倍數:</label>
                 <select id="leverageSelect">
-                    <option value="1">1x</option>
-                    <option value="5">5x</option>
-                    <option value="10">10x</option>
-                    <option value="15">15x</option>
-                    <option value="20" selected>20x</option>
-                    <option value="25">25x</option>
-                    <option value="30">30x</option>
-                    <option value="35">35x</option>
-                    <option value="40">40x</option>
-                    <option value="45">45x</option>
-                    <option value="50">50x</option>
-                    <option value="55">55x</option>
-                    <option value="60">60x</option>
-                    <option value="65">65x</option>
-                    <option value="70">70x</option>
-                    <option value="75">75x</option>
-                    <option value="80">80x</option>
-                    <option value="85">85x</option>
-                    <option value="90">90x</option>
-                    <option value="95">95x</option>
-                    <option value="100">100x</option>
+                    <option value="1">1x</option><option value="5">5x</option><option value="10">10x</option><option value="15">15x</option><option value="20" selected>20x</option><option value="25">25x</option><option value="30">30x</option><option value="35">35x</option><option value="40">40x</option><option value="45">45x</option><option value="50">50x</option><option value="55">55x</option><option value="60">60x</option><option value="65">65x</option><option value="70">70x</option><option value="75">75x</option><option value="80">80x</option><option value="85">85x</option><option value="90">90x</option><option value="95">95x</option><option value="100">100x</option>
                 </select>
             </div>
 
@@ -140,31 +144,10 @@
                 <div id="copy-current-price" class="price-display">-- USDT</div>
             </div>
 
-            <!-- [修改] 擴充槓桿選項 -->
             <div class="form-group">
                 <label for="copyLeverageSelect">槓桿倍數:</label>
                 <select id="copyLeverageSelect">
-                    <option value="1">1x</option>
-                    <option value="5">5x</option>
-                    <option value="10">10x</option>
-                    <option value="15">15x</option>
-                    <option value="20" selected>20x</option>
-                    <option value="25">25x</option>
-                    <option value="30">30x</option>
-                    <option value="35">35x</option>
-                    <option value="40">40x</option>
-                    <option value="45">45x</option>
-                    <option value="50">50x</option>
-                    <option value="55">55x</option>
-                    <option value="60">60x</option>
-                    <option value="65">65x</option>
-                    <option value="70">70x</option>
-                    <option value="75">75x</option>
-                    <option value="80">80x</option>
-                    <option value="85">85x</option>
-                    <option value="90">90x</option>
-                    <option value="95">95x</option>
-                    <option value="100">100x</option>
+                    <option value="1">1x</option><option value="5">5x</option><option value="10">10x</option><option value="15">15x</option><option value="20" selected>20x</option><option value="25">25x</option><option value="30">30x</option><option value="35">35x</option><option value="40">40x</option><option value="45">45x</option><option value="50">50x</option><option value="55">55x</option><option value="60">60x</option><option value="65">65x</option><option value="70">70x</option><option value="75">75x</option><option value="80">80x</option><option value="85">85x</option><option value="90">90x</option><option value="95">95x</option><option value="100">100x</option>
                 </select>
             </div>
 
@@ -206,7 +189,9 @@
         </div>
     </div>
 
-    <!-- 使用 Flask 的 url_for 函數來引用靜態 JavaScript 檔案 -->
+    <!-- JavaScript 檔案 -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <!-- [新增] Datepicker JS -->
+    <script src="https://cdn.jsdelivr.net/npm/vanillajs-datepicker@1.3.4/dist/js/datepicker-full.min.js"></script>
 </body>
 </html>
