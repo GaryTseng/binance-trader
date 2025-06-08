@@ -15,8 +15,6 @@ const openOrdersListDiv = document.getElementById('openOrdersList');
 const openOrdersMessageDiv = document.getElementById('openOrdersMessage');
 const refreshOpenOrdersButton = document.getElementById('refreshOpenOrdersButton');
 const cancelAllOpenOrdersButton = document.getElementById('cancelAllOpenOrdersButton');
-const setLeverageButton = document.getElementById('setLeverageButton');
-const changeMarginTypeButton = document.getElementById('changeMarginTypeButton');
 
 // 跟單模式相關 DOM 元素
 const copySymbolSelect = document.getElementById('copySymbolSelect');
@@ -33,8 +31,6 @@ const copyOpenOrdersListDiv = document.getElementById('copyOpenOrdersList');
 const copyOpenOrdersMessageDiv = document.getElementById('copyOpenOrdersMessage');
 const copyRefreshOpenOrdersButton = document.getElementById('copyRefreshOpenOrdersButton');
 const copyCancelAllOpenOrdersButton = document.getElementById('copyCancelAllOpenOrdersButton');
-const copySetLeverageButton = document.getElementById('copySetLeverageButton');
-const copyChangeMarginTypeButton = document.getElementById('copyChangeMarginTypeButton');
 
 // 頁籤切換相關 DOM 元素
 const tabFutures = document.getElementById('tab-futures');
@@ -57,7 +53,7 @@ const addFavoriteBtn = document.getElementById('add-favorite-btn');
 const favoriteSymbolInput = document.getElementById('favorite-symbol-input');
 const favoritesList = document.getElementById('favorites-list');
 
-// [新增] 合約價值顯示相關 DOM 元素
+// 合約價值顯示相關 DOM 元素
 const futuresLeveragedValueDiv = document.getElementById('futures-leveraged-value');
 const copyLeveragedValueDiv = document.getElementById('copy-leveraged-value');
 
@@ -232,32 +228,23 @@ function populateSymbolDatalist() {
 // --- U本位合約相關函式 ---
 
 async function setLeverage(symbol, leverage) {
-    if (!exchangeInfo[symbol]) {
-        displayMessage('無效的交易對符號...', 'warning');
-        return null;
-    }
-    return apiCall('/api/setLeverage', 'POST', { symbol, leverage }, messageDiv);
+    if (!exchangeInfo[symbol]) { return null; }
+    return apiCall('/api/setLeverage', 'POST', { symbol, leverage }, null);
 }
 
 async function changeMarginType(symbol, marginType) {
-    if (!exchangeInfo[symbol]) {
-        displayMessage('無效的交易對符號...', 'warning');
-        return null;
-    }
-    return apiCall('/api/changeMarginType', 'POST', { symbol, marginType }, messageDiv);
+    if (!exchangeInfo[symbol]) { return null; }
+    return apiCall('/api/changeMarginType', 'POST', { symbol, marginType }, null);
 }
 
 async function placeOrder(symbol, side, order_type, quantity_usdt = null, quantity_contract = null, price = null, stop_price = null) {
-    if (!exchangeInfo[symbol]) {
-        displayMessage('無效的交易對符號...', 'warning');
-        return null;
-    }
+    if (!exchangeInfo[symbol]) { return null; }
     const data = { symbol, side, type: order_type };
     if (quantity_usdt !== null) data.quantity_usdt = quantity_usdt;
     if (quantity_contract !== null) data.quantity_contract = quantity_contract;
     if (price !== null) data.price = price;
     if (stop_price !== null) data.stopPrice = stop_price;
-    return apiCall('/api/placeOrder', 'POST', data, messageDiv);
+    return apiCall('/api/placeOrder', 'POST', data, null);
 }
 
 async function fetchPositions() {
@@ -316,32 +303,23 @@ async function cancelAllOpenOrders(symbol, apiPrefix) {
 // --- 跟單模式相關函式 ---
 
 async function setCopyLeverage(symbol, leverage) {
-    if (!exchangeInfo[symbol]) {
-        displayMessage('無效的交易對符號...', 'warning', copyMessageDiv);
-        return null;
-    }
-    return apiCall('/api/copytrading/setLeverage', 'POST', { symbol, leverage }, copyMessageDiv);
+    if (!exchangeInfo[symbol]) { return null; }
+    return apiCall('/api/copytrading/setLeverage', 'POST', { symbol, leverage }, null);
 }
 
 async function changeCopyMarginType(symbol, marginType) {
-    if (!exchangeInfo[symbol]) {
-        displayMessage('無效的交易對符號...', 'warning', copyMessageDiv);
-        return null;
-    }
-    return apiCall('/api/copytrading/changeMarginType', 'POST', { symbol, marginType }, copyMessageDiv);
+    if (!exchangeInfo[symbol]) { return null; }
+    return apiCall('/api/copytrading/changeMarginType', 'POST', { symbol, marginType }, null);
 }
 
 async function placeCopyOrder(symbol, side, order_type, quantity_usdt = null, quantity_contract = null, price = null, stop_price = null) {
-    if (!exchangeInfo[symbol]) {
-        displayMessage('無效的交易對符號...', 'warning', copyMessageDiv);
-        return null;
-    }
+    if (!exchangeInfo[symbol]) { return null; }
     const data = { symbol, side, type: order_type };
     if (quantity_usdt !== null) data.quantity_usdt = quantity_usdt;
     if (quantity_contract !== null) data.quantity_contract = quantity_contract;
     if (price !== null) data.price = price;
     if (stop_price !== null) data.stopPrice = stop_price;
-    return apiCall('/api/copytrading/placeOrder', 'POST', data, copyMessageDiv);
+    return apiCall('/api/copytrading/placeOrder', 'POST', data, null);
 }
 
 async function fetchCopyPositions() {
@@ -388,11 +366,15 @@ function renderPositions(positions, targetDiv, mode, apiMode) {
         targetDiv.innerHTML = `<p class="no-positions">目前沒有 ${mode} 持倉。</p>`;
         return;
     }
+    // [修改] 調整表格標頭
     let html = `
         <table>
             <thead>
                 <tr>
-                    <th>交易對</th><th>持倉方向</th><th>數量 (單位)</th><th>入口價格</th><th>標記價格</th><th>未實現盈虧 (USDT)</th><th>損益 (ROE %)</th><th>槓桿倍數</th><th>保證金模式</th><th>操作</th><th>止盈設定 (ROE %)</th>
+                    <th>交易對</th><th>持倉方向</th><th>數量</th><th>入口價格</th><th>標記價格</th><th>未實現盈虧</th><th>ROE %</th><th>槓桿</th><th>模式</th>
+                    <th>市價平倉 (吃單)</th>
+                    <th>限價平倉 (掛單)</th>
+                    <th>止盈設定 (ROE %)</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -412,6 +394,7 @@ function renderPositions(positions, targetDiv, mode, apiMode) {
             if(initialNotional > 0) pnlPercentage = (unRealizedProfit / initialNotional) * 100 * leverage;
         }
         const formatNumber = (num, precision = 2) => isNaN(num) || num === null ? 'N/A' : num.toFixed(precision);
+        // [修改] 新增市價平倉按鈕，並修改原按鈕
         html += `
             <tr>
                 <td>${p.symbol}</td>
@@ -422,7 +405,8 @@ function renderPositions(positions, targetDiv, mode, apiMode) {
                 <td style="color:${unRealizedProfit>=0?'green':'red'};">${formatNumber(unRealizedProfit,3)}</td>
                 <td style="color:${pnlPercentage>=0?'green':'red'};">${formatNumber(pnlPercentage,2)}%</td>
                 <td>${leverage}x</td><td>${p.marginType}</td>
-                <td><button class="action-button-danger close-position-btn" data-symbol="${p.symbol}" data-side="${positionAmt > 0 ? 'SELL':'BUY'}" data-quantity="${Math.abs(positionAmt)}" data-apimode="${apiMode}">平倉</button></td>
+                <td><button class="action-button-danger market-close-btn" data-symbol="${p.symbol}" data-side="${positionAmt > 0 ? 'SELL':'BUY'}" data-quantity="${Math.abs(positionAmt)}" data-apimode="${apiMode}">平倉</button></td>
+                <td><button class="action-button limit-close-btn" data-symbol="${p.symbol}" data-side="${positionAmt > 0 ? 'SELL':'BUY'}" data-quantity="${Math.abs(positionAmt)}" data-apimode="${apiMode}">速止盈</button></td>
                 <td><input type="number" class="take-profit-input" value="5" min="0.1" step="0.1" style="width:60px;display:inline-block;margin-right:5px;">% <button class="action-button set-take-profit-btn" data-symbol="${p.symbol}" data-side="${positionAmt > 0 ? 'SELL':'BUY'}" data-quantity="${Math.abs(positionAmt)}" data-entryprice="${entryPrice}" data-leverage="${leverage}" data-apimode="${apiMode}">止盈</button></td>
             </tr>`;
     });
@@ -518,19 +502,83 @@ function addOpenOrdersButtonListeners(containerDiv) {
 }
 
 function addPositionButtonListeners(containerDiv, apiMode) {
-    containerDiv.querySelectorAll('.close-position-btn').forEach(button => {
+    // [新增] 市價平倉按鈕的監聽器
+    containerDiv.querySelectorAll('.market-close-btn').forEach(button => {
         button.onclick = async () => {
             const { symbol, side, quantity } = button.dataset;
-            showConfirmModal(`您確定要市價平倉 ${symbol} 的 ${quantity} 單位嗎？`, async (confirmed) => {
+            const msgDiv = apiMode === 'futures' ? messageDiv : copyMessageDiv;
+
+            const confirmMsg = `您確定要以 <b style="color:red;">市價(吃單)</b> 平倉 ${symbol} 的 ${quantity} 單位嗎？`;
+            showConfirmModal(confirmMsg, async (confirmed) => {
                 if (confirmed) {
                     const placeOrderFn = apiMode === 'futures' ? placeOrder : placeCopyOrder;
-                    await placeOrderFn(symbol, side, 'MARKET', null, parseFloat(quantity)); 
-                    if (tabFutures.checked) fetchPositions();
-                    else fetchCopyPositions();
+                    displayMessage(`正在以市價送出平倉單...`, 'info', msgDiv);
+                    const result = await placeOrderFn(symbol, side, 'MARKET', null, parseFloat(quantity));
+                    if (result) {
+                        displayMessage('市價平倉單已成功送出！', 'success', msgDiv);
+                        setTimeout(() => {
+                            if (tabFutures.checked) { fetchPositions(); fetchOpenOrders(); }
+                            else { fetchCopyPositions(); fetchCopyOpenOrders(); }
+                        }, 1500);
+                    } else {
+                        displayMessage('市價平倉單送出失敗。', 'error', msgDiv);
+                    }
                 }
             });
         };
     });
+    
+    // [修改] 限價平倉 (速止盈) 按鈕的監聽器
+    containerDiv.querySelectorAll('.limit-close-btn').forEach(button => {
+        button.onclick = async () => {
+            const { symbol, side, quantity } = button.dataset;
+            const msgDiv = apiMode === 'futures' ? messageDiv : copyMessageDiv;
+
+            displayMessage('正在獲取最新價格...', 'info', msgDiv);
+            const priceEndpoint = apiMode === 'futures' ? '/api/tickerPrice' : '/api/copytrading/tickerPrice';
+            const priceResponse = await apiCall(`${priceEndpoint}?symbol=${symbol}`, 'GET', null, null);
+            if (!priceResponse || !priceResponse.price) {
+                displayMessage(`無法獲取 ${symbol} 最新價格。`, 'error', msgDiv);
+                return;
+            }
+            const currentPrice = parseFloat(priceResponse.price);
+
+            const priceFilter = exchangeInfo[symbol]?.filters.find(f => f.filterType === 'PRICE_FILTER');
+            if (!priceFilter) {
+                displayMessage(`無法獲取 ${symbol} 的價格精度資訊。`, 'error', msgDiv);
+                return;
+            }
+            const tickSize = parseFloat(priceFilter.tickSize);
+            const pricePrecision = getPricePrecision(symbol);
+
+            let limitPrice;
+            if (side === 'SELL') { // 平多倉，掛的賣單價格要略高於市價
+                limitPrice = currentPrice + tickSize;
+            } else { // 平空倉，掛的買單價格要略低於市價
+                limitPrice = currentPrice - tickSize;
+            }
+            limitPrice = parseFloat(limitPrice.toFixed(pricePrecision));
+
+            const confirmMsg = `您確定要以 <b style="color:blue;">限價 ${limitPrice} (掛單)</b> <br>平倉 ${symbol} 的 ${quantity} 單位嗎？`;
+            showConfirmModal(confirmMsg, async (confirmed) => {
+                if (confirmed) {
+                    const placeOrderFn = apiMode === 'futures' ? placeOrder : placeCopyOrder;
+                    displayMessage(`正在以限價 ${limitPrice} 送出平倉單...`, 'info', msgDiv);
+                    const result = await placeOrderFn(symbol, side, 'LIMIT', null, parseFloat(quantity), limitPrice);
+                    if (result) {
+                        displayMessage('限價平倉單已成功送出！', 'success', msgDiv);
+                        setTimeout(() => {
+                            if (tabFutures.checked) { fetchPositions(); fetchOpenOrders(); }
+                            else { fetchCopyPositions(); fetchCopyOpenOrders(); }
+                        }, 1500);
+                    } else {
+                         displayMessage('限價平倉單送出失敗。', 'error', msgDiv);
+                    }
+                }
+            });
+        };
+    });
+
     containerDiv.querySelectorAll('.set-take-profit-btn').forEach(button => {
         button.onclick = async () => {
             const { symbol, side, quantity, entryprice, apimode, leverage } = button.dataset; 
@@ -554,59 +602,84 @@ function addPositionButtonListeners(containerDiv, apiMode) {
 }
 
 
+async function handlePlaceOrder(apiMode, side) {
+    const isFutures = apiMode === 'futures';
+    const symbolInput = isFutures ? symbolSelect : copySymbolSelect;
+    const leverageInput = isFutures ? leverageSelect : copyLeverageSelect;
+    const marginTypeInput = isFutures ? marginTypeSelect : copyMarginTypeSelect;
+    const quantityInputElem = isFutures ? quantityInput : copyQuantityInput;
+    const msgDiv = isFutures ? messageDiv : copyMessageDiv;
+    
+    const setLeverageFn = isFutures ? setLeverage : setCopyLeverage;
+    const changeMarginFn = isFutures ? changeMarginType : changeCopyMarginType;
+    const placeOrderFn = isFutures ? placeOrder : placeCopyOrder;
+
+    const symbol = symbolInput.value.trim().toUpperCase();
+    const leverage = parseInt(leverageInput.value);
+    const marginType = marginTypeInput.value;
+    const marginAmount = parseFloat(quantityInputElem.value);
+
+    if (!symbol || !exchangeInfo[symbol]) {
+        displayMessage('請選擇或輸入一個有效的合約代碼。', 'error', msgDiv);
+        return;
+    }
+    if (isNaN(marginAmount) || marginAmount <= 0) {
+        displayMessage('請輸入有效的保證金金額。', 'error', msgDiv);
+        return;
+    }
+
+    const leveragedValue = marginAmount * leverage;
+    
+    const confirmMsg = `您確定要下單嗎？<br><br>
+                      合約: <b>${symbol}</b><br>
+                      方向: <b>${side === 'BUY' ? '開多' : '開空'}</b><br>
+                      槓桿: <b>${leverage}x</b><br>
+                      模式: <b>${marginType === 'ISOLATED' ? '逐倉' : '全倉'}</b><br>
+                      保證金: <b>${marginAmount.toFixed(2)} USDT</b><br>
+                      合約價值: <b>≈${leveragedValue.toFixed(2)} USDT</b>`;
+    
+    showConfirmModal(confirmMsg, async (confirmed) => {
+        if (!confirmed) return;
+
+        try {
+            displayMessage(`(1/3) 正在設定槓桿為 ${leverage}x...`, 'info', msgDiv);
+            const leverageResult = await setLeverageFn(symbol, leverage);
+            if (!leverageResult) throw new Error('設定槓桿失敗，請檢查API權限或網路。');
+
+            displayMessage(`(2/3) 正在設定保證金模式為 ${marginType}...`, 'info', msgDiv);
+            const marginResult = await changeMarginFn(symbol, marginType);
+            if (!marginResult || marginResult.code !== 200) {
+                if (marginResult && marginResult.code === -4046) {
+                     console.log('保證金模式無需變更，繼續執行。');
+                } else {
+                    throw new Error(`設定保證金模式失敗: ${marginResult?.msg || '未知錯誤'}`);
+                }
+            }
+            
+            displayMessage(`(3/3) 正在下單...`, 'info', msgDiv);
+            const orderResult = await placeOrderFn(symbol, side, 'MARKET', leveragedValue);
+            if (!orderResult) throw new Error('下單失敗，請檢查餘額或API權限。');
+
+            displayMessage(`訂單成功送出！`, 'success', msgDiv);
+
+        } catch (error) {
+            console.error('下單流程中斷:', error);
+            displayMessage(`操作失敗: ${error.message}`, 'error', msgDiv);
+        }
+    });
+}
+
 // --- 事件監聽器 ---
 
-setLeverageButton.addEventListener('click', async () => {
-    const symbol = symbolSelect.value.toUpperCase();
-    const leverage = parseInt(leverageSelect.value);
-    if (!isNaN(leverage) && leverage > 0) await setLeverage(symbol, leverage);
-    else displayMessage('請輸入有效的槓桿倍數', 'warning');
-});
-changeMarginTypeButton.addEventListener('click', () => changeMarginType(symbolSelect.value.toUpperCase(), marginTypeSelect.value));
+buyButton.addEventListener('click', () => handlePlaceOrder('futures', 'BUY'));
+sellButton.addEventListener('click', () => handlePlaceOrder('futures', 'SELL'));
+copyBuyButton.addEventListener('click', () => handlePlaceOrder('copytrading', 'BUY'));
+copySellButton.addEventListener('click', () => handlePlaceOrder('copytrading', 'SELL'));
 
-buyButton.addEventListener('click', () => {
-    const leveragedValue = parseFloat(futuresLeveragedValueDiv.textContent);
-    if (!isNaN(leveragedValue) && leveragedValue > 0) {
-        placeOrder(symbolSelect.value.toUpperCase(), 'BUY', 'MARKET', leveragedValue);
-    } else {
-        displayMessage('請輸入有效的保證金和槓桿。', 'warning');
-    }
-});
-sellButton.addEventListener('click', () => {
-    const leveragedValue = parseFloat(futuresLeveragedValueDiv.textContent);
-    if (!isNaN(leveragedValue) && leveragedValue > 0) {
-        placeOrder(symbolSelect.value.toUpperCase(), 'SELL', 'MARKET', leveragedValue);
-    } else {
-        displayMessage('請輸入有效的保證金和槓桿。', 'warning');
-    }
-});
+
 refreshPositionsButton.addEventListener('click', fetchPositions);
 refreshOpenOrdersButton.addEventListener('click', fetchOpenOrders);
 cancelAllOpenOrdersButton.addEventListener('click', () => cancelAllOpenOrders(symbolSelect.value.toUpperCase(), '/api'));
-
-copySetLeverageButton.addEventListener('click', () => {
-    const leverage = parseInt(copyLeverageSelect.value);
-    if (!isNaN(leverage) && leverage > 0) setCopyLeverage(copySymbolSelect.value.toUpperCase(), leverage);
-    else displayMessage('請輸入有效的槓桿倍數', 'warning', copyMessageDiv);
-});
-copyChangeMarginTypeButton.addEventListener('click', () => changeCopyMarginType(copySymbolSelect.value.toUpperCase(), copyMarginTypeSelect.value));
-
-copyBuyButton.addEventListener('click', () => {
-    const leveragedValue = parseFloat(copyLeveragedValueDiv.textContent);
-    if (!isNaN(leveragedValue) && leveragedValue > 0) {
-        placeCopyOrder(copySymbolSelect.value.toUpperCase(), 'BUY', 'MARKET', leveragedValue);
-    } else {
-        displayMessage('請輸入有效的保證金和槓桿。', 'warning', copyMessageDiv);
-    }
-});
-copySellButton.addEventListener('click', () => {
-     const leveragedValue = parseFloat(copyLeveragedValueDiv.textContent);
-    if (!isNaN(leveragedValue) && leveragedValue > 0) {
-        placeCopyOrder(copySymbolSelect.value.toUpperCase(), 'SELL', 'MARKET', leveragedValue);
-    } else {
-        displayMessage('請輸入有效的保證金和槓桿。', 'warning', copyMessageDiv);
-    }
-});
 copyRefreshPositionsButton.addEventListener('click', fetchCopyPositions);
 copyRefreshOpenOrdersButton.addEventListener('click', fetchCopyOpenOrders);
 copyCancelAllOpenOrdersButton.addEventListener('click', () => cancelAllOpenOrders(copySymbolSelect.value.toUpperCase(), '/api/copytrading'));
@@ -663,7 +736,6 @@ async function updateAccountBalances() {
     }
 }
 
-// [新增] 更新合約價值的函式
 function updateLeveragedValue() {
     const margin = parseFloat(quantityInput.value);
     const leverage = parseInt(leverageSelect.value);
@@ -695,7 +767,7 @@ function setupTab(isFutures) {
         fetchCopyOpenOrders();
     }
     handleSymbolChange();
-    updateLeveragedValue(); // 切換頁籤時也更新
+    updateLeveragedValue(); 
 }
 
 tabFutures.addEventListener('change', () => setupTab(true));
@@ -748,7 +820,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     symbolSelect.addEventListener('input', handleSymbolChange);
     copySymbolSelect.addEventListener('input', handleSymbolChange);
 
-    // [新增] 為保證金和槓桿欄位新增事件監聽器
     quantityInput.addEventListener('input', updateLeveragedValue);
     leverageSelect.addEventListener('change', updateLeveragedValue);
     copyQuantityInput.addEventListener('input', updateLeveragedValue);
@@ -756,5 +827,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     setupTab(tabFutures.checked);
     startRealtimeUpdates();
-    updateLeveragedValue(); // 首次載入時初始化一次
+    updateLeveragedValue(); 
 });
