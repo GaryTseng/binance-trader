@@ -58,8 +58,9 @@
                 <div id="futures-current-price" class="price-display">-- USDT</div>
             </div>
 
+            <!-- [修改] 移除獨立的設定按鈕 -->
             <div class="form-group">
-                <label for="leverageSelect">設置槓桿倍數:</label>
+                <label for="leverageSelect">槓桿倍數:</label>
                 <select id="leverageSelect">
                     <option value="1">1x</option>
                     <option value="5">5x</option>
@@ -70,19 +71,16 @@
                     <option value="100">100x</option>
                     <option value="125">125x</option>
                 </select>
-                <button id="setLeverageButton" class="action-button">設定槓桿</button>
             </div>
 
             <div class="form-group">
-                <label for="marginTypeSelect">選擇保證金模式:</label>
+                <label for="marginTypeSelect">保證金模式:</label>
                 <select id="marginTypeSelect">
                     <option value="ISOLATED">逐倉</option>
                     <option value="CROSSED">全倉</option>
                 </select>
-                <button id="changeMarginTypeButton" class="action-button">修改保證金模式</button>
             </div>
             
-            <!-- [修改] 下單數量改為保證金輸入 -->
             <div class="form-group">
                 <label for="quantityInput">保證金 (USDT):</label>
                 <input type="number" id="quantityInput" value="50" min="1" step="any">
@@ -129,8 +127,9 @@
                 <div id="copy-current-price" class="price-display">-- USDT</div>
             </div>
 
+            <!-- [修改] 移除獨立的設定按鈕 -->
             <div class="form-group">
-                <label for="copyLeverageSelect">設置槓桿倍數:</label>
+                <label for="copyLeverageSelect">槓桿倍數:</label>
                 <select id="copyLeverageSelect">
                     <option value="1">1x</option>
                     <option value="5">5x</option>
@@ -141,19 +140,16 @@
                     <option value="100">100x</option>
                     <option value="125">125x</option>
                 </select>
-                <button id="copySetLeverageButton" class="action-button">設定槓桿</button>
             </div>
 
             <div class="form-group">
-                <label for="copyMarginTypeSelect">選擇保證金模式:</label>
+                <label for="copyMarginTypeSelect">保證金模式:</label>
                 <select id="copyMarginTypeSelect">
                     <option value="ISOLATED">逐倉</option>
                     <option value="CROSSED">全倉</option>
                 </select>
-                <button id="copyChangeMarginTypeButton" class="action-button">修改保證金模式</button>
             </div>
 
-            <!-- [修改] 下單數量改為保證金輸入 -->
             <div class="form-group">
                 <label for="copyQuantityInput">保證金 (USDT):</label>
                 <input type="number" id="copyQuantityInput" value="50" min="1" step="any">
