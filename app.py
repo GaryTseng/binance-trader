@@ -327,7 +327,7 @@ def copytrading_cancel_order():
     return cancel_order_logic(request.get_json(), COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
 def get_balance_logic(api_key, secret_key):
-    """獲取帳戶餘額，並返回 USDT 的可用餘額"""
+    """獲取帳戶餘額"""
     return make_api_request('/fapi/v2/balance', 'GET', {}, api_key, secret_key)
 
 @app.route('/api/getBalance', methods=['GET'])
@@ -337,6 +337,32 @@ def get_futures_balance():
 @app.route('/api/copytrading/getBalance', methods=['GET'])
 def get_copytrading_balance():
     return get_balance_logic(COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
+
+# [新增] 獲取交易歷史的邏輯
+def get_trade_history_logic(api_key, secret_key):
+    """獲取指定時間範圍內的帳戶成交歷史"""
+    start_time = request.args.get('startTime')
+    end_time = request.args.get('endTime')
+    
+    params = {}
+    if start_time:
+        params['startTime'] = int(start_time)
+    if end_time:
+        params['endTime'] = int(end_time)
+    # 限制最多返回 1000 筆
+    params['limit'] = 1000
+    
+    return make_api_request('/fapi/v1/userTrades', 'GET', params, api_key, secret_key)
+
+# [新增] 獲取交易歷史的路由
+@app.route('/api/getTradeHistory', methods=['GET'])
+def get_futures_trade_history():
+    return get_trade_history_logic(FUTURES_API_KEY, FUTURES_SECRET_KEY)
+
+@app.route('/api/copytrading/getTradeHistory', methods=['GET'])
+def get_copytrading_trade_history():
+    return get_trade_history_logic(COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
+
 
 if __name__ == '__main__':
     # --- 啟動程序 ---
@@ -366,4 +392,3 @@ if __name__ == '__main__':
 
     # 4. 啟動 Flask 應用
     app.run(debug=True, host='0.0.0.0', port=5000)
-
