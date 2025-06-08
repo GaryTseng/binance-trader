@@ -68,7 +68,7 @@ let priceUpdateInterval = null;
 // --- 輔助函式 ---
 
 function displayMessage(message, type = 'info', targetDiv = messageDiv) {
-    targetDiv.textContent = message;
+    targetDiv.innerHTML = message; // Use innerHTML to render bold tags etc.
     targetDiv.className = type;
     setTimeout(() => {
         targetDiv.textContent = '';
@@ -114,6 +114,8 @@ async function apiCall(endpoint, method = 'GET', data = null, targetMessageDiv) 
     try {
         const response = await fetch(endpoint, options);
         const result = await response.json();
+        
+        result.ok = response.ok;
 
         if (targetMessageDiv) {
             if (response.ok) {
@@ -129,13 +131,13 @@ async function apiCall(endpoint, method = 'GET', data = null, targetMessageDiv) 
                 displayMessage(`操作失敗: ${errorMessage}`, 'error', targetMessageDiv);
             }
         }
-        return response.ok ? result : null;
+        return result; 
     } catch (error) {
         console.error(`API 請求失敗 (${endpoint}):`, error);
         if (targetMessageDiv) {
             displayMessage(`網絡請求失敗: ${error.message}`, 'error', targetMessageDiv);
         }
-        return null;
+        return { ok: false, msg: `網絡請求失敗: ${error.message}` };
     }
 }
 
@@ -251,7 +253,7 @@ async function fetchPositions() {
     positionsMessageDiv.textContent = '載入中...';
     try {
         const result = await apiCall('/api/getPositions', 'GET', null, null); 
-        if (result && Array.isArray(result)) {
+        if (result && result.ok && Array.isArray(result)) {
             renderPositions(result, positionsListDiv, 'U本位', 'futures');
             positionsMessageDiv.textContent = '';
         } else {
@@ -269,7 +271,7 @@ async function fetchOpenOrders() {
     openOrdersMessageDiv.textContent = '載入中...';
     try {
         const result = await apiCall(`/api/getOpenOrders`, 'GET', null, null); 
-        if (result && Array.isArray(result)) {
+        if (result && result.ok && Array.isArray(result)) {
             renderOpenOrders(result, openOrdersListDiv, 'U本位', 'futures');
             openOrdersMessageDiv.textContent = '';
         } else {
@@ -292,7 +294,7 @@ async function cancelAllOpenOrders(symbol, apiPrefix) {
     showConfirmModal(`您確定要撤銷 ${symbol} 的所有委託單嗎？`, async (confirmed) => {
         if (confirmed) {
             const result = await apiCall(`${apiPrefix}/cancelAllOpenOrders?symbol=${symbol}`, 'DELETE', null, targetDiv);
-            if (result) {
+            if (result && result.ok) {
                 if (apiPrefix === '/api') fetchOpenOrders();
                 else fetchCopyOpenOrders();
             }
@@ -326,7 +328,7 @@ async function fetchCopyPositions() {
     copyPositionsMessageDiv.textContent = '載入中...';
     try {
         const result = await apiCall('/api/copytrading/getPositions', 'GET', null, null); 
-        if (result && Array.isArray(result)) {
+        if (result && result.ok && Array.isArray(result)) {
             renderPositions(result, copyPositionsListDiv, '跟單模式', 'copytrading');
             copyPositionsMessageDiv.textContent = '';
         } else {
@@ -344,7 +346,7 @@ async function fetchCopyOpenOrders() {
     copyOpenOrdersMessageDiv.textContent = '載入中...';
     try {
         const result = await apiCall(`/api/copytrading/getOpenOrders`, 'GET', null, null); 
-        if (result && Array.isArray(result)) {
+        if (result && result.ok && Array.isArray(result)) {
             renderOpenOrders(result, copyOpenOrdersListDiv, '跟單模式', 'copytrading');
             copyOpenOrdersMessageDiv.textContent = '';
         } else {
@@ -366,7 +368,6 @@ function renderPositions(positions, targetDiv, mode, apiMode) {
         targetDiv.innerHTML = `<p class="no-positions">目前沒有 ${mode} 持倉。</p>`;
         return;
     }
-    // [修改] 調整表格標頭
     let html = `
         <table>
             <thead>
@@ -394,7 +395,6 @@ function renderPositions(positions, targetDiv, mode, apiMode) {
             if(initialNotional > 0) pnlPercentage = (unRealizedProfit / initialNotional) * 100 * leverage;
         }
         const formatNumber = (num, precision = 2) => isNaN(num) || num === null ? 'N/A' : num.toFixed(precision);
-        // [修改] 新增市價平倉按鈕，並修改原按鈕
         html += `
             <tr>
                 <td>${p.symbol}</td>
@@ -484,7 +484,7 @@ async function cancelSingleOrder(symbol, orderId, apiMode) {
     showConfirmModal(`您確定要撤銷委託單 ID: ${orderId} 嗎？`, async (confirmed) => {
         if (confirmed) {
             const result = await apiCall(`${apiPrefix}/cancelOrder`, 'POST', { symbol, orderId }, targetDiv);
-            if (result) {
+            if (result && result.ok) {
                 if (apiMode === 'futures') fetchOpenOrders();
                 else fetchCopyOpenOrders();
             }
@@ -502,7 +502,6 @@ function addOpenOrdersButtonListeners(containerDiv) {
 }
 
 function addPositionButtonListeners(containerDiv, apiMode) {
-    // [新增] 市價平倉按鈕的監聽器
     containerDiv.querySelectorAll('.market-close-btn').forEach(button => {
         button.onclick = async () => {
             const { symbol, side, quantity } = button.dataset;
@@ -514,7 +513,7 @@ function addPositionButtonListeners(containerDiv, apiMode) {
                     const placeOrderFn = apiMode === 'futures' ? placeOrder : placeCopyOrder;
                     displayMessage(`正在以市價送出平倉單...`, 'info', msgDiv);
                     const result = await placeOrderFn(symbol, side, 'MARKET', null, parseFloat(quantity));
-                    if (result) {
+                    if (result && result.ok) {
                         displayMessage('市價平倉單已成功送出！', 'success', msgDiv);
                         setTimeout(() => {
                             if (tabFutures.checked) { fetchPositions(); fetchOpenOrders(); }
@@ -528,7 +527,6 @@ function addPositionButtonListeners(containerDiv, apiMode) {
         };
     });
     
-    // [修改] 限價平倉 (速止盈) 按鈕的監聽器
     containerDiv.querySelectorAll('.limit-close-btn').forEach(button => {
         button.onclick = async () => {
             const { symbol, side, quantity } = button.dataset;
@@ -552,9 +550,9 @@ function addPositionButtonListeners(containerDiv, apiMode) {
             const pricePrecision = getPricePrecision(symbol);
 
             let limitPrice;
-            if (side === 'SELL') { // 平多倉，掛的賣單價格要略高於市價
+            if (side === 'SELL') { 
                 limitPrice = currentPrice + tickSize;
-            } else { // 平空倉，掛的買單價格要略低於市價
+            } else { 
                 limitPrice = currentPrice - tickSize;
             }
             limitPrice = parseFloat(limitPrice.toFixed(pricePrecision));
@@ -565,7 +563,7 @@ function addPositionButtonListeners(containerDiv, apiMode) {
                     const placeOrderFn = apiMode === 'futures' ? placeOrder : placeCopyOrder;
                     displayMessage(`正在以限價 ${limitPrice} 送出平倉單...`, 'info', msgDiv);
                     const result = await placeOrderFn(symbol, side, 'LIMIT', null, parseFloat(quantity), limitPrice);
-                    if (result) {
+                    if (result && result.ok) {
                         displayMessage('限價平倉單已成功送出！', 'success', msgDiv);
                         setTimeout(() => {
                             if (tabFutures.checked) { fetchPositions(); fetchOpenOrders(); }
@@ -644,21 +642,21 @@ async function handlePlaceOrder(apiMode, side) {
         try {
             displayMessage(`(1/3) 正在設定槓桿為 ${leverage}x...`, 'info', msgDiv);
             const leverageResult = await setLeverageFn(symbol, leverage);
-            if (!leverageResult) throw new Error('設定槓桿失敗，請檢查API權限或網路。');
+            if (!leverageResult || !leverageResult.ok) throw new Error('設定槓桿失敗，請檢查API權限或網路。');
 
             displayMessage(`(2/3) 正在設定保證金模式為 ${marginType}...`, 'info', msgDiv);
             const marginResult = await changeMarginFn(symbol, marginType);
-            if (!marginResult || marginResult.code !== 200) {
-                if (marginResult && marginResult.code === -4046) {
-                     console.log('保證金模式無需變更，繼續執行。');
-                } else {
-                    throw new Error(`設定保證金模式失敗: ${marginResult?.msg || '未知錯誤'}`);
-                }
+            
+            if (!marginResult.ok && marginResult.code !== -4046) {
+                throw new Error(`設定保證金模式失敗: ${marginResult?.msg || '未知錯誤'}`);
+            }
+            if(marginResult.code === -4046){
+                console.log('保證金模式無需變更，繼續執行。');
             }
             
             displayMessage(`(3/3) 正在下單...`, 'info', msgDiv);
             const orderResult = await placeOrderFn(symbol, side, 'MARKET', leveragedValue);
-            if (!orderResult) throw new Error('下單失敗，請檢查餘額或API權限。');
+            if (!orderResult || !orderResult.ok) throw new Error(`下單失敗: ${orderResult?.msg || '請檢查餘額或API權限。'}`);
 
             displayMessage(`訂單成功送出！`, 'success', msgDiv);
 
@@ -702,7 +700,7 @@ async function updateTickerPrice() {
         return;
     }
     const priceResponse = await apiCall(`${apiEndpoint}?symbol=${symbol}`, 'GET', null, null);
-    if (priceResponse && priceResponse.price) {
+    if (priceResponse && priceResponse.ok) {
         let oldPrice = parseFloat(targetDiv.textContent) || 0;
         let newPrice = parseFloat(priceResponse.price);
         targetDiv.textContent = `${newPrice.toFixed(getPricePrecision(symbol))} USDT`;
@@ -721,14 +719,14 @@ function handleSymbolChange() {
 
 async function updateAccountBalances() {
     const futuresBalanceData = await apiCall('/api/getBalance', 'GET', null, null);
-    if (futuresBalanceData && Array.isArray(futuresBalanceData)) {
+    if (futuresBalanceData && futuresBalanceData.ok && Array.isArray(futuresBalanceData)) {
         const usdtBalance = futuresBalanceData.find(asset => asset.asset === 'USDT');
         futuresBalanceSpan.textContent = usdtBalance ? parseFloat(usdtBalance.availableBalance).toFixed(2) : 'N/A';
     } else {
         futuresBalanceSpan.textContent = '錯誤';
     }
     const copyBalanceData = await apiCall('/api/copytrading/getBalance', 'GET', null, null);
-    if (copyBalanceData && Array.isArray(copyBalanceData)) {
+    if (copyBalanceData && copyBalanceData.ok && Array.isArray(copyBalanceData)) {
         const usdtBalance = copyBalanceData.find(asset => asset.asset === 'USDT');
         copyBalanceSpan.textContent = usdtBalance ? parseFloat(usdtBalance.availableBalance).toFixed(2) : 'N/A';
     } else {
