@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import requests
 import json
+import threading
 from urllib.parse import urlencode
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
@@ -39,14 +40,29 @@ exchange_info_cache = {}
 def get_binance_server_time():
     """獲取幣安伺服器時間並計算與本地時間的偏移量"""
     global time_offset
+    print("正在與幣安伺服器同步時間...")
     try:
-        response = requests.get(f"{FAPI_BASE_URL}/fapi/v1/time")
+        # 增加超時設定
+        response = requests.get(f"{FAPI_BASE_URL}/fapi/v1/time", timeout=5)
         response.raise_for_status()
         server_time = response.json()['serverTime']
-        time_offset = server_time - int(time.time() * 1000)
-        print(f"幣安伺服器時間與本地時間偏移量 (毫秒): {time_offset}")
+        local_time = int(time.time() * 1000)
+        time_offset = server_time - local_time
+        print(f"與幣安伺服器時間同步成功。偏移量: {time_offset}ms")
     except requests.exceptions.RequestException as e:
         print(f"獲取幣安伺服器時間失敗: {e}")
+        # 拋出異常，讓呼叫者處理
+        raise e
+
+def sync_time_periodically():
+    """在背景定期同步時間"""
+    while True:
+        # 每 30 分鐘同步一次 (1800 秒)
+        time.sleep(1800)
+        try:
+            get_binance_server_time()
+        except Exception as e:
+            print(f"背景時間同步失敗: {e}")
 
 def generate_signature(query_string, secret_key):
     """生成 HMAC SHA256 簽名"""
@@ -310,12 +326,10 @@ def cancel_order():
 def copytrading_cancel_order():
     return cancel_order_logic(request.get_json(), COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
-# --- [新增] 獲取帳戶餘額的邏輯 ---
 def get_balance_logic(api_key, secret_key):
     """獲取帳戶餘額，並返回 USDT 的可用餘額"""
     return make_api_request('/fapi/v2/balance', 'GET', {}, api_key, secret_key)
 
-# --- [新增] 獲取帳戶餘額的路由 ---
 @app.route('/api/getBalance', methods=['GET'])
 def get_futures_balance():
     return get_balance_logic(FUTURES_API_KEY, FUTURES_SECRET_KEY)
@@ -325,7 +339,31 @@ def get_copytrading_balance():
     return get_balance_logic(COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
 if __name__ == '__main__':
+    # --- 啟動程序 ---
+    
+    # 1. 啟動時同步時間，如果失敗則重試
+    max_retries = 5
+    retry_delay = 5 # seconds
+    for i in range(max_retries):
+        try:
+            get_binance_server_time()
+            break # 成功則跳出循環
+        except Exception as e:
+            print(f"時間同步失敗 (第 {i+1}/{max_retries} 次嘗試)。將在 {retry_delay} 秒後重試...")
+            if i == max_retries - 1:
+                print("無法與幣安伺服器同步時間，應用程式即將結束。請檢查您的網路連線或防火牆設定。")
+                exit()
+            time.sleep(retry_delay)
+
+    # 2. 獲取交易所資訊
     with app.app_context():
-        get_binance_server_time()
         get_exchange_info()
+    
+    # 3. 啟動背景時間同步執行緒
+    sync_thread = threading.Thread(target=sync_time_periodically)
+    sync_thread.daemon = True # 讓主程式結束時，執行緒也跟著結束
+    sync_thread.start()
+
+    # 4. 啟動 Flask 應用
     app.run(debug=True, host='0.0.0.0', port=5000)
+
