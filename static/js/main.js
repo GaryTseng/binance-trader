@@ -53,6 +53,17 @@ const addFavoriteBtn = document.getElementById('add-favorite-btn');
 const favoriteSymbolInput = document.getElementById('favorite-symbol-input');
 const favoritesList = document.getElementById('favorites-list');
 
+// [新增] 交易紀錄面板相關 DOM 元素
+const historyPanel = document.getElementById('history-panel');
+const historyToggleBtn = document.getElementById('history-toggle-btn');
+const historyTabFutures = document.getElementById('history-tab-futures');
+const historyTabCopytrading = document.getElementById('history-tab-copytrading');
+const historyStartDateInput = document.getElementById('history-start-date');
+const historyEndDateInput = document.getElementById('history-end-date');
+const queryHistoryBtn = document.getElementById('query-history-btn');
+const tradeHistoryList = document.getElementById('trade-history-list');
+const historyMessageDiv = document.getElementById('history-message');
+
 // 合約價值顯示相關 DOM 元素
 const futuresLeveragedValueDiv = document.getElementById('futures-leveraged-value');
 const copyLeveragedValueDiv = document.getElementById('copy-leveraged-value');
@@ -642,7 +653,7 @@ async function handlePlaceOrder(apiMode, side) {
         try {
             displayMessage(`(1/3) 正在設定槓桿為 ${leverage}x...`, 'info', msgDiv);
             const leverageResult = await setLeverageFn(symbol, leverage);
-            if (!leverageResult || !leverageResult.ok) throw new Error('設定槓桿失敗，請檢查API權限或網路。');
+            if (!leverageResult.ok) throw new Error('設定槓桿失敗，請檢查API權限或網路。');
 
             displayMessage(`(2/3) 正在設定保證金模式為 ${marginType}...`, 'info', msgDiv);
             const marginResult = await changeMarginFn(symbol, marginType);
@@ -656,7 +667,7 @@ async function handlePlaceOrder(apiMode, side) {
             
             displayMessage(`(3/3) 正在下單...`, 'info', msgDiv);
             const orderResult = await placeOrderFn(symbol, side, 'MARKET', leveragedValue);
-            if (!orderResult || !orderResult.ok) throw new Error(`下單失敗: ${orderResult?.msg || '請檢查餘額或API權限。'}`);
+            if (!orderResult.ok) throw new Error(`下單失敗: ${orderResult?.msg || '請檢查餘額或API權限。'}`);
 
             displayMessage(`訂單成功送出！`, 'success', msgDiv);
 
@@ -785,13 +796,126 @@ function startRealtimeUpdates() {
     }, 10000); 
 }
 
+// [新增] 交易紀錄相關函式
+async function fetchTradeHistory() {
+    historyMessageDiv.textContent = '查詢中...';
+    tradeHistoryList.innerHTML = '';
+
+    const apiMode = historyTabFutures.checked ? 'futures' : 'copytrading';
+    const apiEndpoint = apiMode === 'futures' ? '/api/getTradeHistory' : '/api/copytrading/getTradeHistory';
+    
+    // 將日期轉換為 Unix 時間戳 (毫秒)
+    const startDate = new Date(historyStartDateInput.value);
+    startDate.setHours(0, 0, 0, 0); // 設定為當天 00:00:00
+    const startTime = startDate.getTime();
+
+    const endDate = new Date(historyEndDateInput.value);
+    endDate.setHours(23, 59, 59, 999); // 設定為當天 23:59:59
+    const endTime = endDate.getTime();
+
+    if (isNaN(startTime) || isNaN(endTime)) {
+        historyMessageDiv.textContent = '請選擇有效的日期範圍。';
+        return;
+    }
+    
+    const result = await apiCall(`${apiEndpoint}?startTime=${startTime}&endTime=${endTime}`, 'GET', null, null);
+
+    if (result && result.ok && Array.isArray(result)) {
+        renderTradeHistory(result);
+        historyMessageDiv.textContent = `共查詢到 ${result.length} 筆交易。`;
+    } else {
+        tradeHistoryList.innerHTML = '<li>查詢失敗或沒有紀錄。</li>';
+        historyMessageDiv.textContent = `查詢失敗: ${result?.msg || '未知錯誤'}`;
+    }
+}
+
+function renderTradeHistory(trades) {
+    if (trades.length === 0) {
+        tradeHistoryList.innerHTML = '<li>此範圍內沒有交易紀錄。</li>';
+        return;
+    }
+
+    // 依時間倒序排序 (API 回傳的是正序)
+    trades.reverse();
+
+    let listHtml = '';
+    trades.forEach(trade => {
+        const tradeTime = new Date(trade.time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+        const pnl = parseFloat(trade.realizedPnl);
+        const commission = parseFloat(trade.commission);
+        const netPnl = pnl - commission;
+        const pnlColor = netPnl >= 0 ? 'green' : 'red';
+        const sideColor = trade.buyer ? 'green' : 'red'; // 買方為綠
+
+        listHtml += `
+            <li>
+                <div class="trade-header">
+                    <span class="trade-symbol">${trade.symbol}</span>
+                    <span class="trade-pnl" style="color: ${pnlColor};">
+                        ${netPnl.toFixed(4)} USDT
+                    </span>
+                </div>
+                <div class="trade-info">
+                    <span class="trade-label">方向:</span>
+                    <span class="trade-value" style="color: ${sideColor}; font-weight: bold;">
+                        ${trade.buyer ? '買入' : '賣出'} ${trade.maker ? '(掛單)' : '(吃單)'}
+                    </span>
+                </div>
+                 <div class="trade-info">
+                    <span class="trade-label">時間:</span>
+                    <span class="trade-value trade-time">${tradeTime}</span>
+                </div>
+                <div class="trade-info">
+                    <span class="trade-label">價格:</span>
+                    <span class="trade-value">${parseFloat(trade.price).toFixed(getPricePrecision(trade.symbol))}</span>
+                </div>
+                 <div class="trade-info">
+                    <span class="trade-label">數量:</span>
+                    <span class="trade-value">${parseFloat(trade.qty)}</span>
+                </div>
+                 <div class="trade-info">
+                    <span class="trade-label">手續費:</span>
+                    <span class="trade-value">${commission.toFixed(4)} ${trade.commissionAsset}</span>
+                </div>
+                <div class="trade-info">
+                    <span class="trade-label">實現盈虧:</span>
+                    <span class="trade-value">${pnl.toFixed(4)}</span>
+                </div>
+            </li>
+        `;
+    });
+    tradeHistoryList.innerHTML = listHtml;
+}
+
+
 document.addEventListener('DOMContentLoaded', async () => {
+    // 初始化 Datepicker
+    const datepicker_start = new Datepicker(historyStartDateInput, {
+        autohide: true,
+        format: 'yyyy-mm-dd',
+        language: 'zh-TW',
+    });
+    const datepicker_end = new Datepicker(historyEndDateInput, {
+        autohide: true,
+        format: 'yyyy-mm-dd',
+        language: 'zh-TW',
+    });
+
+    // 設定預設日期
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    datepicker_start.setDate(yesterday);
+    datepicker_end.setDate(today);
+
+
     loadFavorites();
     renderFavorites();
 
     await fetchExchangeInfo();
     updateAccountBalances(); 
     
+    // 我的最愛面板事件
     favoritesToggleBtn.addEventListener('click', () => {
         favoritesPanel.classList.toggle('collapsed');
         document.body.classList.toggle('favorites-collapsed');
@@ -815,9 +939,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // [新增] 交易紀錄面板事件
+    historyToggleBtn.addEventListener('click', () => {
+        historyPanel.classList.toggle('collapsed');
+        document.body.classList.toggle('history-collapsed');
+    });
+    queryHistoryBtn.addEventListener('click', fetchTradeHistory);
+    historyTabFutures.addEventListener('change', fetchTradeHistory);
+    historyTabCopytrading.addEventListener('change', fetchTradeHistory);
+
+
+    // 交易對選擇框事件
     symbolSelect.addEventListener('input', handleSymbolChange);
     copySymbolSelect.addEventListener('input', handleSymbolChange);
 
+    // 保證金與槓桿輸入事件
     quantityInput.addEventListener('input', updateLeveragedValue);
     leverageSelect.addEventListener('change', updateLeveragedValue);
     copyQuantityInput.addEventListener('input', updateLeveragedValue);
@@ -826,4 +962,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupTab(tabFutures.checked);
     startRealtimeUpdates();
     updateLeveragedValue(); 
+    fetchTradeHistory(); // 首次載入時查詢一次交易紀錄
 });
