@@ -53,7 +53,7 @@ const addFavoriteBtn = document.getElementById('add-favorite-btn');
 const favoriteSymbolInput = document.getElementById('favorite-symbol-input');
 const favoritesList = document.getElementById('favorites-list');
 
-// [新增] 交易紀錄面板相關 DOM 元素
+// 交易紀錄面板相關 DOM 元素
 const historyPanel = document.getElementById('history-panel');
 const historyToggleBtn = document.getElementById('history-toggle-btn');
 const historyTabFutures = document.getElementById('history-tab-futures');
@@ -588,6 +588,7 @@ function addPositionButtonListeners(containerDiv, apiMode) {
         };
     });
 
+    // [修改] '止盈設定' 按鈕邏輯
     containerDiv.querySelectorAll('.set-take-profit-btn').forEach(button => {
         button.onclick = async () => {
             const { symbol, side, quantity, entryprice, apimode, leverage } = button.dataset; 
@@ -598,12 +599,33 @@ function addPositionButtonListeners(containerDiv, apiMode) {
             }
             const entryPriceNum = parseFloat(entryprice);
             const leverageNum = parseInt(leverage);
-            let stopPrice = side === 'SELL' ? entryPriceNum * (1 + (takeProfitPercentage / (100 * leverageNum))) : entryPriceNum * (1 - (takeProfitPercentage / (100 * leverageNum)));
-            stopPrice = parseFloat(stopPrice.toFixed(getPricePrecision(symbol)));
-            showConfirmModal(`為 ${symbol} 建立止盈單(ROE ${takeProfitPercentage}%)？觸發價: ${stopPrice}`, async (confirmed) => {
+            
+            // 計算止盈的目標限價價格
+            let limitPrice = side === 'SELL' 
+                ? entryPriceNum * (1 + (takeProfitPercentage / (100 * leverageNum))) 
+                : entryPriceNum * (1 - (takeProfitPercentage / (100 * leverageNum)));
+            limitPrice = parseFloat(limitPrice.toFixed(getPricePrecision(symbol)));
+
+            const msgDiv = apiMode === 'futures' ? messageDiv : copyMessageDiv;
+
+            const confirmMsg = `為 ${symbol} 建立一個目標ROE為 ${takeProfitPercentage}% 的<br><b>限價止盈單</b> (掛單)？<br><br>掛單價格: <b>${limitPrice}</b>`;
+            showConfirmModal(confirmMsg, async (confirmed) => {
                 if (confirmed) {
                     const placeOrderFn = apimode === 'futures' ? placeOrder : placeCopyOrder;
-                    await placeOrderFn(symbol, side, 'TAKE_PROFIT_MARKET', null, parseFloat(quantity), null, stopPrice);
+                    
+                    displayMessage(`正在以限價 ${limitPrice} 送出止盈單...`, 'info', msgDiv);
+                    // [修改] 將訂單類型改為 LIMIT，並將計算出的價格作為限價傳入
+                    const result = await placeOrderFn(symbol, side, 'LIMIT', null, parseFloat(quantity), limitPrice, null);
+                    
+                    if (result && result.ok) {
+                        displayMessage('限價止盈單已成功送出！', 'success', msgDiv);
+                        setTimeout(() => {
+                            if (tabFutures.checked) { fetchPositions(); fetchOpenOrders(); }
+                            else { fetchCopyPositions(); fetchCopyOpenOrders(); }
+                        }, 1500);
+                    } else {
+                         displayMessage(`限價止盈單送出失敗: ${result?.msg || ''}`, 'error', msgDiv);
+                    }
                 }
             });
         };
@@ -804,13 +826,12 @@ async function fetchTradeHistory() {
     const apiMode = historyTabFutures.checked ? 'futures' : 'copytrading';
     const apiEndpoint = apiMode === 'futures' ? '/api/getTradeHistory' : '/api/copytrading/getTradeHistory';
     
-    // 將日期轉換為 Unix 時間戳 (毫秒)
     const startDate = new Date(historyStartDateInput.value);
-    startDate.setHours(0, 0, 0, 0); // 設定為當天 00:00:00
+    startDate.setHours(0, 0, 0, 0); 
     const startTime = startDate.getTime();
 
     const endDate = new Date(historyEndDateInput.value);
-    endDate.setHours(23, 59, 59, 999); // 設定為當天 23:59:59
+    endDate.setHours(23, 59, 59, 999); 
     const endTime = endDate.getTime();
 
     if (isNaN(startTime) || isNaN(endTime)) {
@@ -835,7 +856,6 @@ function renderTradeHistory(trades) {
         return;
     }
 
-    // 依時間倒序排序 (API 回傳的是正序)
     trades.reverse();
 
     let listHtml = '';
@@ -845,7 +865,7 @@ function renderTradeHistory(trades) {
         const commission = parseFloat(trade.commission);
         const netPnl = pnl - commission;
         const pnlColor = netPnl >= 0 ? 'green' : 'red';
-        const sideColor = trade.buyer ? 'green' : 'red'; // 買方為綠
+        const sideColor = trade.buyer ? 'green' : 'red';
 
         listHtml += `
             <li>
@@ -901,7 +921,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         language: 'zh-TW',
     });
 
-    // 設定預設日期
     const today = new Date();
     const yesterday = new Date();
     yesterday.setDate(today.getDate() - 1);
@@ -915,7 +934,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await fetchExchangeInfo();
     updateAccountBalances(); 
     
-    // 我的最愛面板事件
     favoritesToggleBtn.addEventListener('click', () => {
         favoritesPanel.classList.toggle('collapsed');
         document.body.classList.toggle('favorites-collapsed');
@@ -939,7 +957,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // [新增] 交易紀錄面板事件
     historyToggleBtn.addEventListener('click', () => {
         historyPanel.classList.toggle('collapsed');
         document.body.classList.toggle('history-collapsed');
@@ -949,11 +966,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     historyTabCopytrading.addEventListener('change', fetchTradeHistory);
 
 
-    // 交易對選擇框事件
     symbolSelect.addEventListener('input', handleSymbolChange);
     copySymbolSelect.addEventListener('input', handleSymbolChange);
 
-    // 保證金與槓桿輸入事件
     quantityInput.addEventListener('input', updateLeveragedValue);
     leverageSelect.addEventListener('change', updateLeveragedValue);
     copyQuantityInput.addEventListener('input', updateLeveragedValue);
@@ -962,5 +977,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupTab(tabFutures.checked);
     startRealtimeUpdates();
     updateLeveragedValue(); 
-    fetchTradeHistory(); // 首次載入時查詢一次交易紀錄
+    fetchTradeHistory(); 
 });
