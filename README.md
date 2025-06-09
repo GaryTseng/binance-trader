@@ -1,5 +1,7 @@
-![image](https://github.com/user-attachments/assets/16fae020-e9b0-4570-a340-90e4bcf3e0c6)
-![image](https://github.com/user-attachments/assets/03ae879c-af66-4e0f-979b-fa24d8ba20f6)
+![image](https://github.com/user-attachments/assets/c2c6a952-b4db-4ec8-987d-5de96777af6c)
+![image](https://github.com/user-attachments/assets/f3e42d57-1bf9-4eae-9b4b-5f0726d73589)
+![image](https://github.com/user-attachments/assets/23d8c2a2-daa1-462e-90ea-b1fdc72450e2)
+
 
 
 幣安合約交易 Web 應用程式
