@@ -276,11 +276,39 @@ def get_positions():
 def copytrading_get_positions():
     return get_positions_logic(COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
+# [修改] 修正 get_open_orders_logic 來處理大整數 OrderID
 def get_open_orders_logic(symbol, api_key, secret_key):
+    """獲取當前委託，並將 orderId 轉為字串以防前端精度丟失"""
     params = {}
     if symbol:
         params['symbol'] = symbol
-    return make_api_request('/fapi/v1/openOrders', 'GET', params, api_key, secret_key)
+    
+    # 複製 make_api_request 的核心邏輯以便攔截和修改回傳資料
+    params['timestamp'] = int(time.time() * 1000) + time_offset
+    params['recvWindow'] = 60000
+    
+    query_string = urlencode(params)
+    signature = generate_signature(query_string, secret_key)
+    query_string += f"&signature={signature}"
+    
+    headers = {'X-MBX-APIKEY': api_key}
+    url = f"{FAPI_BASE_URL}/fapi/v1/openOrders?{query_string}"
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        orders = response.json()
+        if isinstance(orders, list):
+            for order in orders:
+                if 'orderId' in order:
+                    order['orderId'] = str(order['orderId']) # 轉為字串
+        return jsonify(orders)
+        
+    except requests.exceptions.RequestException as e:
+        return handle_api_error(e, "獲取當前委託失敗")
+    except json.JSONDecodeError:
+        return jsonify({"code": -1, "msg": "獲取當前委託失敗: API 返回無效 JSON"}), 500
 
 @app.route('/api/getOpenOrders', methods=['GET'])
 def get_open_orders():
@@ -308,23 +336,25 @@ def copytrading_cancel_all_open_orders():
     symbol = request.args.get('symbol')
     return cancel_all_open_orders_logic(symbol, COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
-def cancel_order_logic(data, api_key, secret_key):
+# [修改] 修正撤銷單筆委託的邏輯
+def cancel_order_logic(api_key, secret_key):
     """撤銷一筆指定的委託單"""
-    symbol = data.get('symbol')
-    order_id = data.get('orderId')
+    symbol = request.args.get('symbol')
+    order_id = request.args.get('orderId')
     if not symbol or not order_id:
         return jsonify({"code": -1, "msg": "缺少 symbol 或 orderId 參數"}), 400
     
-    params = {'symbol': symbol, 'orderId': order_id}
+    # 直接使用前端傳來的字串 orderId，不再轉換為整數
+    params = {'symbol': symbol, 'orderId': order_id} 
     return make_api_request('/fapi/v1/order', 'DELETE', params, api_key, secret_key)
 
-@app.route('/api/cancelOrder', methods=['POST'])
+@app.route('/api/cancelOrder', methods=['DELETE'])
 def cancel_order():
-    return cancel_order_logic(request.get_json(), FUTURES_API_KEY, FUTURES_SECRET_KEY)
+    return cancel_order_logic(FUTURES_API_KEY, FUTURES_SECRET_KEY)
 
-@app.route('/api/copytrading/cancelOrder', methods=['POST'])
+@app.route('/api/copytrading/cancelOrder', methods=['DELETE'])
 def copytrading_cancel_order():
-    return cancel_order_logic(request.get_json(), COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
+    return cancel_order_logic(COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
 def get_balance_logic(api_key, secret_key):
     """獲取帳戶餘額"""
@@ -338,7 +368,6 @@ def get_futures_balance():
 def get_copytrading_balance():
     return get_balance_logic(COPYTRADING_API_KEY, COPYTRADING_SECRET_KEY)
 
-# [新增] 獲取交易歷史的邏輯
 def get_trade_history_logic(api_key, secret_key):
     """獲取指定時間範圍內的帳戶成交歷史"""
     start_time = request.args.get('startTime')
@@ -349,12 +378,10 @@ def get_trade_history_logic(api_key, secret_key):
         params['startTime'] = int(start_time)
     if end_time:
         params['endTime'] = int(end_time)
-    # 限制最多返回 1000 筆
     params['limit'] = 1000
     
     return make_api_request('/fapi/v1/userTrades', 'GET', params, api_key, secret_key)
 
-# [新增] 獲取交易歷史的路由
 @app.route('/api/getTradeHistory', methods=['GET'])
 def get_futures_trade_history():
     return get_trade_history_logic(FUTURES_API_KEY, FUTURES_SECRET_KEY)
@@ -392,3 +419,4 @@ if __name__ == '__main__':
 
     # 4. 啟動 Flask 應用
     app.run(debug=True, host='0.0.0.0', port=5000)
+
