@@ -494,7 +494,9 @@ async function cancelSingleOrder(symbol, orderId, apiMode) {
     const targetDiv = apiMode === 'futures' ? openOrdersMessageDiv : copyOpenOrdersMessageDiv;
     showConfirmModal(`您確定要撤銷委託單 ID: ${orderId} 嗎？`, async (confirmed) => {
         if (confirmed) {
-            const result = await apiCall(`${apiPrefix}/cancelOrder`, 'POST', { symbol, orderId }, targetDiv);
+            // [修改] 將方法改為 DELETE，並將參數放在 URL 中
+            const endpoint = `${apiPrefix}/cancelOrder?symbol=${symbol}&orderId=${orderId}`;
+            const result = await apiCall(endpoint, 'DELETE', null, targetDiv);
             if (result && result.ok) {
                 if (apiMode === 'futures') fetchOpenOrders();
                 else fetchCopyOpenOrders();
@@ -588,7 +590,6 @@ function addPositionButtonListeners(containerDiv, apiMode) {
         };
     });
 
-    // [修改] '止盈設定' 按鈕邏輯
     containerDiv.querySelectorAll('.set-take-profit-btn').forEach(button => {
         button.onclick = async () => {
             const { symbol, side, quantity, entryprice, apimode, leverage } = button.dataset; 
@@ -600,7 +601,6 @@ function addPositionButtonListeners(containerDiv, apiMode) {
             const entryPriceNum = parseFloat(entryprice);
             const leverageNum = parseInt(leverage);
             
-            // 計算止盈的目標限價價格
             let limitPrice = side === 'SELL' 
                 ? entryPriceNum * (1 + (takeProfitPercentage / (100 * leverageNum))) 
                 : entryPriceNum * (1 - (takeProfitPercentage / (100 * leverageNum)));
@@ -614,7 +614,6 @@ function addPositionButtonListeners(containerDiv, apiMode) {
                     const placeOrderFn = apimode === 'futures' ? placeOrder : placeCopyOrder;
                     
                     displayMessage(`正在以限價 ${limitPrice} 送出止盈單...`, 'info', msgDiv);
-                    // [修改] 將訂單類型改為 LIMIT，並將計算出的價格作為限價傳入
                     const result = await placeOrderFn(symbol, side, 'LIMIT', null, parseFloat(quantity), limitPrice, null);
                     
                     if (result && result.ok) {
